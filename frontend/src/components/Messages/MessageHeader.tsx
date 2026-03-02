@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { searchMessages, type SearchResult } from '@/lib/api';
 import { useChannelStore } from '@/stores/useChannelStore';
 import type { Channel } from '@/lib/types';
+import { renderMessageContent } from '@/lib/renderMessageContent';
 
 interface MessageHeaderProps {
   channel: Channel;
@@ -161,7 +162,7 @@ export function MessageHeader({ channel, showMembers, onToggleMembers, onToggleP
                             </>
                           )}
                         </div>
-                        <p className="mt-0.5 text-sm text-gray-900 line-clamp-2">{result.content}</p>
+                        <p className="mt-0.5 text-sm text-gray-900 line-clamp-2">{renderMessageContent(result.content)}</p>
                       </div>
                     ))}
                   </div>

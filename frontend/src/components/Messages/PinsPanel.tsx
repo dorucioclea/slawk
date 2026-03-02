@@ -3,6 +3,7 @@ import { X, Pin } from 'lucide-react';
 import { format } from 'date-fns';
 import { getPinnedMessages, type ApiMessage } from '@/lib/api';
 import { Avatar } from '@/components/ui/avatar';
+import { renderMessageContent } from '@/lib/renderMessageContent';
 
 interface PinsPanelProps {
   channelId: number;
@@ -55,7 +56,7 @@ export function PinsPanel({ channelId, onClose }: PinsPanelProps) {
                   {format(new Date(pin.createdAt), 'MMM d, h:mm a')}
                 </span>
               </div>
-              <p className="mt-1 text-[14px] text-[#1D1C1D] leading-[20px]">{pin.content}</p>
+              <p className="mt-1 text-[14px] text-[#1D1C1D] leading-[20px]">{renderMessageContent(pin.content)}</p>
             </div>
           ))
         )}

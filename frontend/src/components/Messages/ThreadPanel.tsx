@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { Avatar } from '@/components/ui/avatar';
 import { getThread, replyToMessage, type ApiMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { renderMessageContent } from '@/lib/renderMessageContent';
 
 interface ThreadPanelProps {
   messageId: number;
@@ -127,7 +128,7 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
                       </span>
                     </div>
                     <p className="text-[15px] text-[#1D1C1D] leading-[22px] whitespace-pre-wrap break-words">
-                      {parentMessage.content}
+                      {renderMessageContent(parentMessage.content)}
                     </p>
                   </div>
                 </div>
@@ -160,7 +161,7 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
                       </span>
                     </div>
                     <p className="text-[14px] text-[#1D1C1D] leading-[20px] whitespace-pre-wrap break-words">
-                      {reply.content}
+                      {renderMessageContent(reply.content)}
                     </p>
                   </div>
                 </div>
