@@ -2,10 +2,10 @@ import React from 'react';
 
 /**
  * Parses inline markdown in a single line and returns React nodes.
- * Handles: **bold**, *italic*, `code`, ~~strikethrough~~, [text](url), @mentions
+ * Handles: **bold**, *italic*, `code`, ~~strikethrough~~, [text](url), plain URLs, @mentions
  */
 function renderInline(content: string, keyOffset: number = 0): React.ReactNode[] {
-  const TOKEN = /(\*\*(.+?)\*\*)|(\*([^*\n]+?)\*)|(`([^`\n]+?)`)|(~~(.+?)~~)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(@[\w][\w .'-]*[\w]|@\w+)/g;
+  const TOKEN = /(\*\*(.+?)\*\*)|(\*([^*\n]+?)\*)|(`([^`\n]+?)`)|(~~(.+?)~~)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"'\])]+)|(@[\w][\w .'-]*[\w]|@\w+)/g;
   const nodes: React.ReactNode[] = [];
   let last = 0;
   let m: RegExpExecArray | null;
@@ -23,7 +23,9 @@ function renderInline(content: string, keyOffset: number = 0): React.ReactNode[]
     } else if (m[9]) {
       nodes.push(<a key={key++} href={m[10]} target="_blank" rel="noopener noreferrer" className="text-slack-link underline hover:text-slack-link-hover">{m[9]}</a>);
     } else if (m[11]) {
-      nodes.push(<span key={key++} className="mention-highlight rounded bg-slack-mention px-[2px] text-slack-link font-medium cursor-pointer hover:bg-slack-mention-hover">{m[11]}</span>);
+      nodes.push(<a key={key++} href={m[11]} target="_blank" rel="noopener noreferrer" className="text-slack-link underline hover:text-slack-link-hover">{m[11]}</a>);
+    } else if (m[12]) {
+      nodes.push(<span key={key++} className="mention-highlight rounded bg-slack-mention px-[2px] text-slack-link font-medium cursor-pointer hover:bg-slack-mention-hover">{m[12]}</span>);
     }
     last = m.index + m[0].length;
   }
