@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { register, uniqueEmail, clickChannel } from './helpers';
+import { register, uniqueEmail, clickChannel, waitForChannelReady } from './helpers';
 
 test.describe('@Mentions', () => {
   test('user can @mention another user in a message', async ({ browser }) => {
@@ -18,9 +18,9 @@ test.describe('@Mentions', () => {
     const page2 = await context2.newPage();
     await register(page2, name2, email2, 'password123');
 
-    // User 1 selects general channel
+    // User 1 selects general channel and waits for socket join to settle
     await clickChannel(page1, 'general');
-    await expect(page1.locator('.ql-editor')).toBeVisible({ timeout: 5000 });
+    await waitForChannelReady(page1);
 
     // Type @ followed by partial name to trigger mention dropdown
     const editor = page1.locator('.ql-editor');

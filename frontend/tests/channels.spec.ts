@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { login, sendMessage, waitForMessage, uniqueEmail, register, clickChannel } from './helpers';
+import { login, sendMessage, waitForMessage, uniqueEmail, register, clickChannel, waitForChannelReady } from './helpers';
 
 test.describe('Channels', () => {
   test.beforeEach(async ({ page }) => {
@@ -30,14 +30,14 @@ test.describe('Channels', () => {
   test('messages are different in each channel', async ({ page }) => {
     // Send a message in #general
     await clickChannel(page, 'general');
-    await expect(page.locator('.ql-editor')).toBeVisible();
+    await waitForChannelReady(page);
     const generalMsg = `General msg ${Date.now()}`;
     await sendMessage(page, generalMsg);
     await waitForMessage(page, generalMsg);
 
     // Switch to #random
     await clickChannel(page, 'random');
-    await expect(page.locator('.ql-editor')).toBeVisible();
+    await waitForChannelReady(page);
 
     // The general message should NOT be visible in #random
     await expect(

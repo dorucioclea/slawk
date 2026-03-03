@@ -1,14 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { register, uniqueEmail, sendMessage, waitForMessage, clickChannel } from './helpers';
+import { register, uniqueEmail, sendMessage, waitForMessage, clickChannel, waitForChannelReady } from './helpers';
 
 test.describe('Pinned Messages', () => {
   test('user can pin a message and view it in pins panel', async ({ page }) => {
     const email = uniqueEmail();
     await register(page, 'PinTester', email, 'password123');
 
-    // Select general channel
+    // Select general channel and wait for socket join to settle
     await clickChannel(page, 'general');
-    await expect(page.locator('.ql-editor')).toBeVisible({ timeout: 5000 });
+    await waitForChannelReady(page);
 
     // Send a message to pin
     const uniqueText = `Pin me ${Date.now()}`;

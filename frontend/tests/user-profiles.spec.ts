@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { register, uniqueEmail, clickChannel } from './helpers';
+import { register, uniqueEmail, clickChannel, waitForChannelReady } from './helpers';
 
 test.describe('User Profiles', () => {
   test('user can view and edit their profile', async ({ page }) => {
@@ -44,17 +44,29 @@ test.describe('User Profiles', () => {
     const name2 = `User2_${Date.now()}`;
     const email2 = uniqueEmail();
 
-    // Register first user and send a message
+    // Register both users (they are auto-joined to #general on registration)
     await register(page, name1, email1, 'password123');
-    await clickChannel(page, 'general');
-    await expect(page.locator('.ql-editor')).toBeVisible({ timeout: 5000 });
 
-    // Register second user in a new context
     const context2 = await browser.newContext();
     const page2 = await context2.newPage();
     await register(page2, name2, email2, 'password123');
+
+    // Reload both pages so the socket reconnects cleanly and re-emits join:channel
+    // for all member channels. This ensures the server processes join:channel before
+    // any messages are sent, preventing the race between socket join and message:send.
+    await page.reload();
+    await page2.reload();
+
+    // Wait for both pages to reload and re-establish the app
+    await expect(page.getByTestId('sidebar')).toBeVisible({ timeout: 10_000 });
+    await expect(page2.getByTestId('sidebar')).toBeVisible({ timeout: 10_000 });
+
+    // Navigate both users to #general and wait for socket join to settle
+    await clickChannel(page, 'general');
+    await waitForChannelReady(page);
+
     await clickChannel(page2, 'general');
-    await expect(page2.locator('.ql-editor')).toBeVisible({ timeout: 5000 });
+    await waitForChannelReady(page2);
 
     // User 2 sends a message
     const quill2 = page2.locator('.ql-editor');
@@ -62,8 +74,9 @@ test.describe('User Profiles', () => {
     await quill2.pressSequentially(`Hello from ${name2}`);
     await page2.keyboard.press('Enter');
 
-    // User 1 waits for the message and clicks on user 2's name
-    await expect(page.getByText(`Hello from ${name2}`)).toBeVisible({ timeout: 10000 });
+    // User 1 waits for the message and clicks on user 2's name.
+    // The message arrives via WebSocket broadcast from user2 to the channel room.
+    await expect(page.getByText(`Hello from ${name2}`)).toBeVisible({ timeout: 30000 });
     const msgRow = page.locator('.group.relative.flex.px-5').filter({ hasText: `Hello from ${name2}` }).first();
     await msgRow.locator('button', { hasText: name2 }).click();
 

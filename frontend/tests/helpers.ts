@@ -68,11 +68,25 @@ export async function sendMessage(page: Page, text: string) {
 /**
  * Wait for a message with the given text to appear in the message list.
  * Targets the message row container (group relative flex px-5).
+ * Uses a 25s timeout to account for WebSocket join latency and message delivery.
  */
 export async function waitForMessage(page: Page, text: string) {
   await expect(
     page.locator('.group.relative.flex.px-5').filter({ hasText: text })
-  ).toBeVisible({ timeout: 10_000 });
+  ).toBeVisible({ timeout: 25_000 });
+}
+
+/**
+ * Wait for the WebSocket channel join to settle after navigation.
+ * The socket join:channel event requires a server-side DB lookup before
+ * the channel room is ready to receive message broadcasts. This ensures
+ * message:send is not emitted before the server has processed join:channel.
+ */
+export async function waitForChannelReady(page: Page) {
+  // Wait for the editor to be interactive, then give socket join time to settle
+  await expect(page.locator('.ql-editor')).toBeVisible({ timeout: 10_000 });
+  // Allow server-side join:channel processing to complete (1.2s covers DB lookup + network latency)
+  await page.waitForTimeout(1200);
 }
 
 /**

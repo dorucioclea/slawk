@@ -7,31 +7,19 @@ test.describe('Bug fix: Thread panel avatars', () => {
     await login(page, 'alice@slawk.dev', 'password123');
 
     // Navigate to #engineering which has seeded thread replies
+    // Seeded users in engineering have randomuser.me avatars, so their threads will have img elements
     await clickChannel(page, 'engineering');
     await expect(page.locator('.ql-editor')).toBeVisible({ timeout: 5000 });
-    await page.waitForTimeout(500);
 
-    // Find a message row that has a thread indicator (threadCount > 0 renders [data-testid="thread-avatars"])
-    let messageRow = page
+    // Wait for at least one threaded message to appear (seeded data has threads in engineering)
+    const messageRowLocator = page
       .locator('.group.relative.flex.px-5')
       .filter({ has: page.locator('[data-testid="thread-avatars"]') })
       .first();
 
-    let hasThread = (await messageRow.count()) > 0;
-
-    // Fall back to #general if engineering has no visible threads
-    if (!hasThread) {
-      await clickChannel(page, 'general');
-      await expect(page.locator('.ql-editor')).toBeVisible({ timeout: 5000 });
-      await page.waitForTimeout(500);
-      messageRow = page
-        .locator('.group.relative.flex.px-5')
-        .filter({ has: page.locator('[data-testid="thread-avatars"]') })
-        .first();
-      hasThread = (await messageRow.count()) > 0;
-    }
-
-    expect(hasThread, 'Expected at least one threaded message in the channel').toBe(true);
+    // Wait up to 8s for seeded threads to appear; seeded users have avatars
+    await expect(messageRowLocator).toBeVisible({ timeout: 8000 });
+    const messageRow = messageRowLocator;
 
     // Click the thread indicator button to open the thread panel
     const threadButton = messageRow.locator('[data-testid="thread-avatars"]').locator('..');

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { login, register, uniqueEmail, sendMessage, waitForMessage, clickChannel, expectChannelInSidebar } from './helpers';
+import { login, register, uniqueEmail, sendMessage, waitForMessage, clickChannel, expectChannelInSidebar, waitForChannelReady } from './helpers';
 
 test.describe('Bug #1: No console errors for non-member channels', () => {
   test('page loads without "must be a member" errors', async ({ page }) => {
@@ -38,7 +38,8 @@ test.describe('Bug #2: New users auto-joined to default channels', () => {
 
     // User should be able to send a message (proving they're a member)
     await clickChannel(page, 'general');
-    await expect(page.locator('.ql-editor')).toBeVisible();
+    // Wait for channel to be ready before sending (socket join:channel must complete)
+    await waitForChannelReady(page);
     const testMsg = `Auto-join test ${Date.now()}`;
     await sendMessage(page, testMsg);
     await waitForMessage(page, testMsg);
@@ -293,8 +294,7 @@ test.describe('Bug #11: Reaction emoji size inside pill', () => {
     await register(page, 'EmojiSize User', email, 'password123');
 
     await clickChannel(page, 'general');
-    await expect(page.locator('.ql-editor')).toBeVisible({ timeout: 10_000 });
-    await page.waitForTimeout(500);
+    await waitForChannelReady(page);
 
     const msg = `emoji-size-${Date.now()}`;
     await sendMessage(page, msg);
@@ -344,7 +344,7 @@ test.describe('Bug #1: Pinned message does not show (edited) label', () => {
 
     await expectChannelInSidebar(page, 'general');
     await clickChannel(page, 'general');
-    await expect(page.locator('.ql-editor')).toBeVisible();
+    await waitForChannelReady(page);
 
     const msg = `pin-edited-${Date.now()}`;
     await sendMessage(page, msg);
@@ -373,7 +373,7 @@ test.describe('Bug #9: Pinned message has orange background', () => {
 
     await expectChannelInSidebar(page, 'general');
     await clickChannel(page, 'general');
-    await expect(page.locator('.ql-editor')).toBeVisible();
+    await waitForChannelReady(page);
 
     const msg = `pin-bg-${Date.now()}`;
     await sendMessage(page, msg);
@@ -402,7 +402,7 @@ test.describe('Bug #12: Bookmark button', () => {
     // Wait for general channel and click it
     await expectChannelInSidebar(page, 'general');
     await clickChannel(page, 'general');
-    await expect(page.locator('.ql-editor')).toBeVisible();
+    await waitForChannelReady(page);
     const msg = `Bookmark test ${Date.now()}`;
     await sendMessage(page, msg);
     await waitForMessage(page, msg);

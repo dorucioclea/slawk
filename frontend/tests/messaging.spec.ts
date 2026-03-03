@@ -1,13 +1,15 @@
 import { test, expect } from '@playwright/test';
-import { login, sendMessage, waitForMessage, uniqueEmail, register, clickChannel } from './helpers';
+import { login, sendMessage, waitForMessage, uniqueEmail, register, clickChannel, waitForChannelReady } from './helpers';
 
 test.describe('Messaging', () => {
   test.beforeEach(async ({ page }) => {
     // Register a fresh user who will be auto-joined to #general and #random
     const email = uniqueEmail();
     await register(page, 'Msg Tester', email, 'password123');
-    // Make sure we're on a channel (general should be auto-selected)
-    await expect(page.locator('.ql-editor')).toBeVisible({ timeout: 10_000 });
+    // Navigate explicitly to general so we know which channel we're on
+    await clickChannel(page, 'general');
+    // Wait for the channel to be fully ready (socket join:channel processed)
+    await waitForChannelReady(page);
   });
 
   test('user can send a message in a channel', async ({ page }) => {
@@ -109,15 +111,15 @@ test.describe('Messaging', () => {
     await page1.reload();
     await page2.reload();
 
-    // Wait for app to load and select general channel
+    // Wait for app to load and select general channel for both users
     for (const page of [page1, page2]) {
       await expect(page.getByTestId('sidebar')).toBeVisible({ timeout: 10_000 });
       await clickChannel(page, 'general');
-      await expect(page.locator('.ql-editor')).toBeVisible({ timeout: 5_000 });
+      await waitForChannelReady(page);
     }
 
-    // Give socket connections time to establish and join channel rooms
-    await page1.waitForTimeout(3_000);
+    // Additional wait to ensure both socket channel joins have been fully processed server-side
+    await page1.waitForTimeout(1_000);
 
     // User 1 sends a message
     const realTimeMsg = `Real-time test ${Date.now()}`;

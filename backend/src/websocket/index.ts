@@ -209,8 +209,11 @@ export function initializeWebSocket(httpServer: HttpServer) {
           },
         });
 
-        // Broadcast to all users in the channel
-        io.to(`channel:${data.channelId}`).emit('message:new', finalMessage);
+        // Always emit to the sender so they see their own message immediately,
+        // even if their socket hasn't joined the channel room yet.
+        socket.emit('message:new', finalMessage);
+        // Broadcast to all OTHER users in the channel room
+        socket.to(`channel:${data.channelId}`).emit('message:new', finalMessage);
       } catch (error) {
         console.error('WebSocket message error:', error);
         socket.emit('error', { message: 'Failed to send message' });
