@@ -83,7 +83,9 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
               />
               <div>
                 <p className="text-[18px] font-bold text-[#1D1C1D]">{profile.name}</p>
-                <p className="text-[13px] text-gray-500">{profile.email}</p>
+                {isOwnProfile && (
+                  <p className="text-[13px] text-gray-500">{profile.email}</p>
+                )}
               </div>
             </div>
 

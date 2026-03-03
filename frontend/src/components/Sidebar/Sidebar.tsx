@@ -471,7 +471,6 @@ export function Sidebar() {
                     </div>
                     <div>
                       <p className="text-[14px] font-medium text-[#1D1C1D]">{u.name}</p>
-                      <p className="text-[12px] text-gray-500">{u.email}</p>
                     </div>
                   </button>
                 ))}
