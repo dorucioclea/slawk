@@ -34,6 +34,20 @@ test.describe('Authentication', () => {
     await expect(page.getByTestId('sidebar')).not.toBeVisible({ timeout: 3_000 });
   });
 
+  test('login shows error message on invalid credentials', async ({ page }) => {
+    await page.goto('/login');
+    await page.getByPlaceholder('name@work-email.com').fill('alice@slawk.dev');
+    await page.getByPlaceholder('Password').fill('wrongpassword999');
+    await page.getByRole('button', { name: /sign in with email/i }).click();
+
+    // Error alert should be visible
+    const errorAlert = page.getByRole('alert');
+    await expect(errorAlert).toBeVisible({ timeout: 5_000 });
+
+    // Should remain on login page
+    await expect(page).toHaveURL(/\/login/);
+  });
+
   test('after successful login, user sees channels page', async ({ page }) => {
     // Register a fresh user first, then login
     const email = uniqueEmail();

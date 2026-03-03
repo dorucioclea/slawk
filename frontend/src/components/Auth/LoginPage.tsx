@@ -7,13 +7,20 @@ import { Input } from '@/components/ui/input';
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const { login, isLoading } = useAuthStore();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await login(email, password);
-    navigate('/');
+    setError('');
+    try {
+      await login(email, password);
+      navigate('/');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Invalid email or password';
+      setError(message);
+    }
   };
 
   return (
@@ -75,6 +82,11 @@ export function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700" role="alert">
+              {error}
+            </div>
+          )}
           <div>
             <Input
               type="email"
