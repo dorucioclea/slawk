@@ -12,6 +12,7 @@ import { useBookmarkStore } from '@/stores/useBookmarkStore';
 import { pinMessage, unpinMessage } from '@/lib/api';
 import type { Message as MessageType } from '@/lib/types';
 import { renderMessageContent } from '@/lib/renderMessageContent';
+import { ImageLightbox } from './ImageLightbox';
 
 interface MessageProps {
   message: MessageType;
@@ -26,6 +27,8 @@ export function Message({ message, showAvatar, isCompact, onOpenThread }: Messag
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [lightboxAlt, setLightboxAlt] = useState<string>('');
   const editInputRef = useRef<HTMLTextAreaElement>(null);
   const hoverLeaveTimer = useRef<ReturnType<typeof setTimeout>>();
   const { addReaction, editMessage, deleteMessage } = useMessageStore();
@@ -183,13 +186,17 @@ export function Message({ message, showAvatar, isCompact, onOpenThread }: Messag
                 className="rounded-lg border border-gray-200 overflow-hidden"
               >
                 {file.mimetype.startsWith('image/') ? (
-                  <a href={file.url} target="_blank" rel="noopener noreferrer">
+                  <button
+                    data-testid="image-thumbnail"
+                    onClick={() => { setLightboxSrc(file.url); setLightboxAlt(file.originalName); }}
+                    className="block cursor-zoom-in focus:outline-none"
+                  >
                     <img
                       src={file.url}
                       alt={file.originalName}
                       className="max-h-[200px] max-w-[300px] object-contain"
                     />
-                  </a>
+                  </button>
                 ) : (
                   <a
                     href={file.url}
@@ -344,6 +351,15 @@ export function Message({ message, showAvatar, isCompact, onOpenThread }: Messag
             onClickOutside={() => setShowEmojiPicker(false)}
           />
         </div>
+      )}
+
+      {/* Image Lightbox */}
+      {lightboxSrc && (
+        <ImageLightbox
+          src={lightboxSrc}
+          alt={lightboxAlt}
+          onClose={() => setLightboxSrc(null)}
+        />
       )}
     </div>
   );
