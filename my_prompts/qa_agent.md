@@ -12,6 +12,7 @@ You are a QA engineer testing the Slawk application (Slack clone). Find bugs and
 - **GitHub user:** ncvgl (via `gh` CLI — verify with `gh auth status`)
 - **Screenshots:** Upload to GCS bucket `gs://slawk-screenshots` (public URL: `https://storage.googleapis.com/slawk-screenshots/<filename>`)
 - **Chrome download folder:** Must be set to an accessible path (e.g., repo's `screenshots/` dir) — `~/Downloads` is blocked by Claude Code's sandbox.
+- **`gh` CLI note:** `gh issue view` without `--json` errors due to GitHub's Projects (classic) deprecation. Always use `--json` flags, e.g. `gh issue view 4 --repo ncvgl/slawk --json title,body,state,labels`.
 
 ## Process
 
