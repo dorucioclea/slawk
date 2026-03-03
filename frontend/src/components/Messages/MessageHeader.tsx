@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { Hash, Star, ChevronDown, Users, Bell, Pin, Search, MoreVertical, FileText, LogOut } from 'lucide-react';
+import { Hash, Star, ChevronDown, Bell, Pin, Search, MoreVertical, FileText, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { searchMessages, type SearchResult } from '@/lib/api';
+import { searchMessages, getChannelMembers, type SearchResult, type ChannelMember } from '@/lib/api';
 import { useChannelStore } from '@/stores/useChannelStore';
 import type { Channel } from '@/lib/types';
 import { renderMessageContent } from '@/lib/renderMessageContent';
+import { Avatar } from '@/components/ui/avatar';
 
 interface MessageHeaderProps {
   channel: Channel;
@@ -29,6 +30,7 @@ export function MessageHeader({ channel, showMembers, onToggleMembers, onToggleP
   const [showResults, setShowResults] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [previewMembers, setPreviewMembers] = useState<ChannelMember[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -57,6 +59,19 @@ export function MessageHeader({ channel, showMembers, onToggleMembers, onToggleP
       return () => document.removeEventListener('mousedown', handleClick);
     }
   }, [showMenu]);
+
+  // Fetch up to 3 member avatars for preview in the header
+  useEffect(() => {
+    let cancelled = false;
+    getChannelMembers(channel.id)
+      .then((data) => {
+        if (!cancelled) setPreviewMembers(data.slice(0, 3));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [channel.id]);
 
   const handleLeaveChannel = async () => {
     setShowMenu(false);
@@ -121,13 +136,32 @@ export function MessageHeader({ channel, showMembers, onToggleMembers, onToggleP
         {/* Right Section */}
         <div className="flex items-center gap-2">
           <button
+            data-testid="member-avatars-button"
             onClick={onToggleMembers}
             className={cn(
-              'flex items-center gap-1 rounded px-1.5 py-0.5 text-[13px] hover:bg-[#F8F8F8]',
+              'flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[13px] hover:bg-[#F8F8F8]',
               showMembers ? 'text-[#1264A3] bg-[#E8F5FA]' : 'text-[#616061]'
             )}
           >
-            <Users className="h-4 w-4" />
+            {previewMembers.length > 0 ? (
+              <div className="flex items-center">
+                {previewMembers.map((member, index) => (
+                  <div
+                    key={member.user.id}
+                    className="relative"
+                    style={{ marginLeft: index === 0 ? 0 : -6, zIndex: previewMembers.length - index }}
+                  >
+                    <Avatar
+                      src={member.user.avatar ?? undefined}
+                      alt={member.user.name}
+                      fallback={member.user.name}
+                      size="sm"
+                      className="h-[18px] w-[18px] ring-1 ring-white"
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <span>{channel.memberCount}</span>
           </button>
           <div className="h-4 w-px bg-[#E0E0E0]" />
