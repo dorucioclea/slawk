@@ -1,7 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { format, isToday, isYesterday } from 'date-fns';
+import Quill from 'quill';
+import 'quill/dist/quill.snow.css';
 import {
   SendHorizontal,
+  Plus,
+  Smile,
+  AtSign,
   Pin,
   FileText,
   X,
@@ -16,6 +21,8 @@ import { useMessageHover } from '@/hooks/useMessageHover';
 import { useMessageEdit } from '@/hooks/useMessageEdit';
 import { MessageToolbar } from './MessageToolbar';
 import { MessageActionsMenu } from './MessageActionsMenu';
+import { FormatToolbar } from './FormatToolbar';
+import { renderMessageContent } from '@/lib/renderMessageContent';
 import type { DMMessage } from '@/stores/useDMStore';
 
 interface DMConversationProps {
@@ -49,7 +56,10 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
   const storeEditMessage = useDMStore((s) => s.editMessage);
   const storeDeleteMessage = useDMStore((s) => s.deleteMessage);
 
-  const [messageText, setMessageText] = useState('');
+  const editorRef = useRef<HTMLDivElement>(null);
+  const quillRef = useRef<Quill | null>(null);
+  const [canSend, setCanSend] = useState(false);
+  const [showInputEmojiPicker, setShowInputEmojiPicker] = useState(false);
   const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
   const [showMoreMenuId, setShowMoreMenuId] = useState<number | null>(null);
   const [showEmojiPickerId, setShowEmojiPickerId] = useState<number | null>(null);
@@ -73,19 +83,146 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
-  const handleSend = async () => {
-    const text = messageText.trim();
+  const serializeDelta = useCallback((quill: Quill): string => {
+    const delta = quill.getContents();
+    let result = '';
+    let inCodeBlock = false;
+    let codeBlockLines: string[] = [];
+
+    const flushCodeBlock = () => {
+      result += '```\n' + codeBlockLines.join('\n') + '\n```';
+      codeBlockLines = [];
+      inCodeBlock = false;
+    };
+
+    for (const op of delta.ops) {
+      if (typeof op.insert !== 'string') continue;
+      const attrs = op.attributes || {};
+      const text = op.insert;
+
+      if (attrs['code-block']) {
+        const lines = text.split('\n');
+        if (!inCodeBlock) inCodeBlock = true;
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (i === lines.length - 1 && line === '') {
+            flushCodeBlock();
+          } else {
+            codeBlockLines.push(line);
+          }
+        }
+      } else {
+        if (inCodeBlock) flushCodeBlock();
+        if (attrs['blockquote']) {
+          const lines = text.split('\n');
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (i < lines.length - 1) {
+              result += '> ' + line + '\n';
+            } else if (line !== '') {
+              result += '> ' + line;
+            }
+          }
+        } else if (attrs['code']) {
+          result += '`' + text + '`';
+        } else {
+          result += text;
+        }
+      }
+    }
+
+    if (inCodeBlock) flushCodeBlock();
+    return result.trim();
+  }, []);
+
+  const handleSend = useCallback(async () => {
+    const quill = quillRef.current;
+    if (!quill) return;
+    const text = serializeDelta(quill);
     if (!text || isSending) return;
 
-    setMessageText('');
+    quill.setText('');
+    setCanSend(false);
     await storeSendMessage(userId, text);
+  }, [userId, isSending, storeSendMessage, serializeDelta]);
+
+  const handleSendRef = useRef(handleSend);
+  handleSendRef.current = handleSend;
+
+  useEffect(() => {
+    if (!editorRef.current || quillRef.current) return;
+
+    const quill = new Quill(editorRef.current, {
+      theme: 'snow',
+      modules: {
+        toolbar: false,
+        keyboard: {
+          bindings: {
+            enter: {
+              key: 'Enter',
+              handler: () => {
+                handleSendRef.current();
+                return false;
+              },
+            },
+          },
+        },
+      },
+      placeholder: `Message ${userName}`,
+    });
+
+    quill.on('text-change', () => {
+      setCanSend(quill.getText().trim().length > 0);
+    });
+
+    // Set test ID on the editable element for Playwright compatibility
+    quill.root.setAttribute('data-testid', 'dm-message-input');
+
+    quillRef.current = quill;
+  }, [userName]);
+
+  useEffect(() => {
+    if (quillRef.current) {
+      quillRef.current.root.dataset.placeholder = `Message ${userName}`;
+    }
+  }, [userName]);
+
+  const applyFormat = (format: string, value?: string) => {
+    const quill = quillRef.current;
+    if (!quill) return;
+    if (value) {
+      const range = quill.getSelection();
+      if (range) {
+        const currentFormat = quill.getFormat(range);
+        quill.format(format, currentFormat[format] === value ? false : value);
+      }
+    } else {
+      const range = quill.getSelection();
+      if (range) {
+        const currentFormat = quill.getFormat(range);
+        quill.format(format, !currentFormat[format]);
+      }
+    }
+    quill.focus();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+  const handleInputEmojiSelect = useCallback((emoji: { native: string }) => {
+    const quill = quillRef.current;
+    if (!quill) return;
+    const range = quill.getSelection(true);
+    quill.insertText(range.index, emoji.native);
+    quill.setSelection(range.index + emoji.native.length);
+    setShowInputEmojiPicker(false);
+    quill.focus();
+  }, []);
+
+  const handleMentionButtonClick = () => {
+    const quill = quillRef.current;
+    if (!quill) return;
+    const range = quill.getSelection(true);
+    quill.insertText(range.index, '@');
+    quill.setSelection(range.index + 1);
+    quill.focus();
   };
 
   const handleStartEdit = (msg: { id: number; content: string }) => {
@@ -264,12 +401,12 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
                               </div>
                             </div>
                           ) : (
-                            <p className="whitespace-pre-wrap break-words text-[15px] leading-[22px] text-slack-primary">
-                              {msg.content}
+                            <div className="whitespace-pre-wrap break-words text-[15px] leading-[22px] text-slack-primary">
+                              {renderMessageContent(msg.content)}
                               {!showAvatar && msg.editedAt && (
                                 <span className="ml-1 text-[12px] text-slack-secondary">(edited)</span>
                               )}
-                            </p>
+                            </div>
                           )}
                         </div>
 
@@ -327,30 +464,66 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
           </div>
 
           {/* Input */}
-          <div className="bg-white px-5 pb-6 pt-4">
-            <div className="flex items-center gap-2 rounded-lg border border-slack-border-light px-3 py-2 focus-within:border-2 focus-within:border-slack-link">
-              <input
-                data-testid="dm-message-input"
-                type="text"
-                value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={`Message ${userName}`}
-                className="flex-1 text-[15px] text-slack-primary outline-none placeholder:text-slack-secondary"
-              />
-              <button
-                onClick={handleSend}
-                disabled={!messageText.trim() || isSending}
-                className={cn(
-                  'flex h-7 w-7 items-center justify-center rounded transition-colors',
-                  messageText.trim()
-                    ? 'bg-slack-btn text-white hover:bg-slack-btn-hover'
-                    : 'text-slack-disabled',
-                )}
-              >
-                <SendHorizontal className="h-4 w-4" />
-              </button>
+          <div className="relative bg-white px-5 pb-6 pt-4">
+            <div className="slawk-editor rounded-[8px] border border-slack-border-light">
+              {/* Formatting Toolbar */}
+              <FormatToolbar onApplyFormat={applyFormat} />
+
+              {/* Quill Editor */}
+              <div ref={editorRef} />
+
+              {/* Emoji Picker */}
+              {showInputEmojiPicker && (
+                <div className="absolute bottom-full left-0 mb-2 z-50">
+                  <EmojiPicker
+                    onEmojiSelect={handleInputEmojiSelect}
+                    onClickOutside={() => setShowInputEmojiPicker(false)}
+                  />
+                </div>
+              )}
+
+              {/* Bottom Toolbar */}
+              <div className="flex items-center justify-between px-[6px] py-1">
+                <div className="flex items-center">
+                  <Button variant="toolbar" size="icon-sm" title="Attach file">
+                    <Plus className="h-[18px] w-[18px]" />
+                  </Button>
+                  <Button
+                    variant="toolbar"
+                    size="icon-sm"
+                    onClick={() => setShowInputEmojiPicker(!showInputEmojiPicker)}
+                  >
+                    <Smile className="h-[18px] w-[18px]" />
+                  </Button>
+                  <Button variant="toolbar" size="icon-sm" onClick={handleMentionButtonClick}>
+                    <AtSign className="h-[18px] w-[18px]" />
+                  </Button>
+                </div>
+                <button
+                  data-testid="dm-send-button"
+                  onClick={handleSend}
+                  disabled={!canSend || isSending}
+                  className={cn(
+                    'flex h-7 items-center justify-center rounded px-2 transition-colors',
+                    canSend
+                      ? 'bg-slack-btn text-white hover:bg-slack-btn-hover'
+                      : 'text-slack-disabled',
+                  )}
+                >
+                  <SendHorizontal className="h-4 w-4" />
+                </button>
+              </div>
             </div>
+
+            <p className="mt-1 text-xs text-slack-hint">
+              <kbd className="rounded bg-slack-active-tab px-1 py-0.5 text-[10px] font-medium">Enter</kbd>{' '}
+              to send,{' '}
+              <kbd className="rounded bg-slack-active-tab px-1 py-0.5 text-[10px] font-medium">
+                Shift + Enter
+              </kbd>{' '}
+              for new line
+            </p>
+
             {sendError && (
               <div className="mt-2 flex items-center justify-between rounded-md bg-slack-error-bg border border-slack-error-border px-3 py-2 text-[13px] text-slack-error">
                 <span>{sendError}</span>
