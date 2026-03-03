@@ -17,6 +17,7 @@ import {
   SendHorizontal,
   X,
   FileIcon,
+  Link2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMessageStore } from '@/stores/useMessageStore';
@@ -53,6 +54,11 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionStartIndex, setMentionStartIndex] = useState<number | null>(null);
   const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkText, setLinkText] = useState('');
+  const linkSavedRangeRef = useRef<{ index: number; length: number } | null>(null);
+  const linkUrlInputRef = useRef<HTMLInputElement>(null);
   const mentionDropdownRef = useRef<HTMLDivElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const { sendMessage } = useMessageStore();
@@ -250,6 +256,31 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
     quill.focus();
   };
 
+  const handleLinkSave = useCallback(() => {
+    const quill = quillRef.current;
+    const range = linkSavedRangeRef.current;
+    if (!quill || !linkUrl.trim()) {
+      setShowLinkModal(false);
+      return;
+    }
+    const url = linkUrl.trim().startsWith('http') ? linkUrl.trim() : `https://${linkUrl.trim()}`;
+    if (range && range.length > 0) {
+      // Apply link to existing selection
+      quill.formatText(range.index, range.length, 'link', url);
+    } else {
+      // Insert new linked text at cursor
+      const insertText = linkText.trim() || url;
+      const insertAt = range ? range.index : quill.getLength() - 1;
+      quill.insertText(insertAt, insertText, 'link', url);
+      quill.setSelection(insertAt + insertText.length);
+    }
+    setShowLinkModal(false);
+    setLinkUrl('');
+    setLinkText('');
+    linkSavedRangeRef.current = null;
+    quill.focus();
+  }, [linkUrl, linkText]);
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -281,13 +312,20 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
 
     if (format === 'link') {
       const range = quill.getSelection();
-      if (range && range.length > 0) {
+      if (range) {
         const currentFormat = quill.getFormat(range);
         if (currentFormat.link) {
           quill.format('link', false);
         } else {
-          const url = prompt('Enter URL:');
-          if (url) quill.format('link', url);
+          // Save the selection range so we can apply the link after modal closes
+          linkSavedRangeRef.current = { index: range.index, length: range.length };
+          // Pre-fill display text from selected text
+          const selectedText = range.length > 0 ? quill.getText(range.index, range.length) : '';
+          setLinkText(selectedText);
+          setLinkUrl('');
+          setShowLinkModal(true);
+          // Focus the URL input after modal renders
+          setTimeout(() => linkUrlInputRef.current?.focus(), 50);
         }
       }
       return;
@@ -466,6 +504,117 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
         </kbd>{' '}
         for new line
       </p>
+
+      {/* Link Modal */}
+      {showLinkModal && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowLinkModal(false);
+              setLinkUrl('');
+              setLinkText('');
+            }
+          }}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/40" />
+
+          {/* Modal panel */}
+          <div className="relative z-10 w-[440px] rounded-xl bg-white shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[rgba(29,28,29,0.13)] px-5 py-4">
+              <div className="flex items-center gap-2">
+                <Link2 className="h-5 w-5 text-[#1264A3]" />
+                <h2 className="text-[17px] font-bold text-[#1D1C1D]">Add link</h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowLinkModal(false);
+                  setLinkUrl('');
+                  setLinkText('');
+                }}
+                className="flex h-7 w-7 items-center justify-center rounded text-[#616061] hover:bg-[#F8F8F8] hover:text-[#1D1C1D]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4 flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[13px] font-semibold text-[#1D1C1D]">
+                  URL
+                </label>
+                <input
+                  ref={linkUrlInputRef}
+                  data-testid="link-url-input"
+                  type="url"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleLinkSave();
+                    if (e.key === 'Escape') {
+                      setShowLinkModal(false);
+                      setLinkUrl('');
+                      setLinkText('');
+                    }
+                  }}
+                  placeholder="https://example.com"
+                  className="h-9 w-full rounded-md border border-[rgba(29,28,29,0.3)] px-3 text-[14px] text-[#1D1C1D] placeholder-[#616061] outline-none focus:border-[#1264A3] focus:ring-1 focus:ring-[#1264A3]"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[13px] font-semibold text-[#1D1C1D]">
+                  Display text <span className="font-normal text-[#616061]">(optional)</span>
+                </label>
+                <input
+                  data-testid="link-text-input"
+                  type="text"
+                  value={linkText}
+                  onChange={(e) => setLinkText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleLinkSave();
+                    if (e.key === 'Escape') {
+                      setShowLinkModal(false);
+                      setLinkUrl('');
+                      setLinkText('');
+                    }
+                  }}
+                  placeholder="Link text"
+                  className="h-9 w-full rounded-md border border-[rgba(29,28,29,0.3)] px-3 text-[14px] text-[#1D1C1D] placeholder-[#616061] outline-none focus:border-[#1264A3] focus:ring-1 focus:ring-[#1264A3]"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 border-t border-[rgba(29,28,29,0.13)] px-5 py-3">
+              <button
+                onClick={() => {
+                  setShowLinkModal(false);
+                  setLinkUrl('');
+                  setLinkText('');
+                }}
+                className="rounded-md border border-[rgba(29,28,29,0.3)] bg-white px-4 py-1.5 text-[14px] font-medium text-[#1D1C1D] hover:bg-[#F8F8F8] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleLinkSave}
+                disabled={!linkUrl.trim()}
+                className={cn(
+                  'rounded-md px-4 py-1.5 text-[14px] font-medium text-white transition-colors',
+                  linkUrl.trim()
+                    ? 'bg-[#007a5a] hover:bg-[#005e46]'
+                    : 'bg-gray-300 cursor-not-allowed'
+                )}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
