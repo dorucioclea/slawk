@@ -21,6 +21,7 @@ export default defineConfig({
       '/users': { target: 'http://localhost:3000', changeOrigin: true },
       '/dms': { target: 'http://localhost:3000', changeOrigin: true },
       '/uploads': { target: 'http://localhost:3000', changeOrigin: true },
+      '/bookmarks': { target: 'http://localhost:3000', changeOrigin: true },
       '/health': { target: 'http://localhost:3000', changeOrigin: true },
       '/socket.io': { target: 'http://localhost:3000', changeOrigin: true, ws: true },
     },
