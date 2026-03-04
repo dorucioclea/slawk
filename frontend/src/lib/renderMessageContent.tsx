@@ -5,7 +5,8 @@ import React from 'react';
  * Handles: **bold**, *italic*, `code`, ~~strikethrough~~, [text](url), plain URLs, @mentions
  */
 function renderInline(content: string, keyOffset: number = 0): React.ReactNode[] {
-  const TOKEN = /(\*\*(.+?)\*\*)|(\*([^*\n]+?)\*)|(`([^`\n]+?)`)|(~~(.+?)~~)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"'\])]+)|(@[\w][\w .'-]*[\w]|@\w+)/g;
+  // @mentions are matched BEFORE italic; italic uses negative lookahead to avoid capturing *@Name*
+  const TOKEN = /(\*\*(.+?)\*\*)|(\*(@[\w][\w .'-]*[\w]|@\w+)\*)|(@[\w][\w .'-]*[\w]|@\w+)|(\*([^*\n]+?)\*)|(`([^`\n]+?)`)|(~~(.+?)~~)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"'\])]+)/g;
   const nodes: React.ReactNode[] = [];
   let last = 0;
   let m: RegExpExecArray | null;
@@ -13,19 +14,29 @@ function renderInline(content: string, keyOffset: number = 0): React.ReactNode[]
   while ((m = TOKEN.exec(content)) !== null) {
     if (m.index > last) nodes.push(content.slice(last, m.index));
     if (m[1]) {
+      // **bold**
       nodes.push(<strong key={key++} className="font-bold">{m[2]}</strong>);
     } else if (m[3]) {
-      nodes.push(<em key={key++} className="leading-[22px]">{m[4]}</em>);
+      // *@mention* — emphasized mention, render as mention (not italic)
+      nodes.push(<span key={key++} className="mention-highlight rounded bg-slack-mention px-[2px] text-slack-link font-medium cursor-pointer hover:bg-slack-mention-hover">{m[4]}</span>);
     } else if (m[5]) {
-      nodes.push(<code key={key++} className="rounded-[3px] bg-slack-code-bg px-1 py-0.5 font-mono text-[0.875em]">{m[6]}</code>);
-    } else if (m[7]) {
-      nodes.push(<s key={key++}>{m[8]}</s>);
-    } else if (m[9]) {
-      nodes.push(<a key={key++} href={m[10]} target="_blank" rel="noopener noreferrer" className="text-slack-link underline hover:text-slack-link-hover">{m[9]}</a>);
-    } else if (m[11]) {
-      nodes.push(<a key={key++} href={m[11]} target="_blank" rel="noopener noreferrer" className="text-slack-link underline hover:text-slack-link-hover">{m[11]}</a>);
+      // @mention
+      nodes.push(<span key={key++} className="mention-highlight rounded bg-slack-mention px-[2px] text-slack-link font-medium cursor-pointer hover:bg-slack-mention-hover">{m[5]}</span>);
+    } else if (m[6]) {
+      // *italic*
+      nodes.push(<em key={key++} className="leading-[22px]">{m[7]}</em>);
+    } else if (m[8]) {
+      // `code`
+      nodes.push(<code key={key++} className="rounded-[3px] bg-slack-code-bg px-1 py-0.5 font-mono text-[0.875em]">{m[9]}</code>);
+    } else if (m[10]) {
+      // ~~strikethrough~~
+      nodes.push(<s key={key++}>{m[11]}</s>);
     } else if (m[12]) {
-      nodes.push(<span key={key++} className="mention-highlight rounded bg-slack-mention px-[2px] text-slack-link font-medium cursor-pointer hover:bg-slack-mention-hover">{m[12]}</span>);
+      // [text](url)
+      nodes.push(<a key={key++} href={m[13]} target="_blank" rel="noopener noreferrer" className="text-slack-link underline hover:text-slack-link-hover">{m[12]}</a>);
+    } else if (m[14]) {
+      // plain URL
+      nodes.push(<a key={key++} href={m[14]} target="_blank" rel="noopener noreferrer" className="text-slack-link underline hover:text-slack-link-hover">{m[14]}</a>);
     }
     last = m.index + m[0].length;
   }
