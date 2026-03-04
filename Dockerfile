@@ -22,6 +22,8 @@ RUN test -f dist/index.js
 
 # ── Stage 3: Production image ────────────────────────────────────────
 FROM node:22-alpine AS production
+# Prisma needs OpenSSL at runtime
+RUN apk add --no-cache openssl
 WORKDIR /app
 
 # Copy backend build output and dependencies
