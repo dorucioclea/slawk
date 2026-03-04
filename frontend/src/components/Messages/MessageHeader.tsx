@@ -131,7 +131,7 @@ export function MessageHeader({ channel, showMembers, onToggleMembers, onToggleP
 
   const handleResultClick = (result: SearchResult) => {
     if (result.channel) {
-      setActiveChannel(result.channel.id);
+      setActiveChannel(result.channel.id, result.id);
     }
     setSearchQuery('');
     setShowResults(false);

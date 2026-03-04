@@ -23,6 +23,7 @@ interface ChannelState {
   directMessages: DirectMessage[];
   activeChannelId: number | null;
   activeDMId: number | null;
+  scrollToMessageId: number | null;
   isLoading: boolean;
   loadError: string | null;
 
@@ -32,7 +33,7 @@ interface ChannelState {
   joinChannel: (channelId: number) => Promise<void>;
   leaveChannel: (channelId: number) => Promise<void>;
   toggleStar: (channelId: number) => void;
-  setActiveChannel: (channelId: number) => void;
+  setActiveChannel: (channelId: number, scrollToMessageId?: number) => void;
   setActiveDM: (dmId: number) => void;
   startDM: (userId: number, userName: string, userAvatar?: string) => void;
   addOrUpdateDM: (userId: number, userName: string, userAvatar?: string) => void;
@@ -49,6 +50,7 @@ export const useChannelStore = create<ChannelState>((set, get) => ({
   directMessages: [],
   activeChannelId: null,
   activeDMId: null,
+  scrollToMessageId: null,
   isLoading: false,
   loadError: null,
 
@@ -210,8 +212,8 @@ export const useChannelStore = create<ChannelState>((set, get) => ({
     }));
   },
 
-  setActiveChannel: (channelId: number) => {
-    set({ activeChannelId: channelId, activeDMId: null });
+  setActiveChannel: (channelId: number, scrollToMessageId?: number) => {
+    set({ activeChannelId: channelId, activeDMId: null, scrollToMessageId: scrollToMessageId ?? null });
     get().markChannelAsRead(channelId);
   },
 

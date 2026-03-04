@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import { useMessageStore } from '@/stores/useMessageStore';
 import { useChannelStore } from '@/stores/useChannelStore';
@@ -45,8 +45,12 @@ function shouldShowAvatar(
 export function MessageList({ channelId, onOpenThread }: MessageListProps) {
   const { getMessagesForChannel, fetchMessages, isLoading, loadError } = useMessageStore();
   const { markChannelAsRead } = useChannelStore();
+  const scrollToMessageId = useChannelStore((s) => s.scrollToMessageId);
   const messages = getMessagesForChannel(channelId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const [highlightedId, setHighlightedId] = useState<number | null>(null);
+  const didScrollToTarget = useRef(false);
 
   // Fetch messages when channel changes
   useEffect(() => {
@@ -66,10 +70,34 @@ export function MessageList({ channelId, onOpenThread }: MessageListProps) {
     });
   }, [channelId, messages.length, markChannelAsRead]);
 
-  // Auto-scroll to bottom on new messages
+  // Scroll to target message from search result
   useEffect(() => {
+    if (!scrollToMessageId || messages.length === 0) return;
+    const el = messageRefs.current.get(scrollToMessageId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedId(scrollToMessageId);
+      didScrollToTarget.current = true;
+      useChannelStore.setState({ scrollToMessageId: null });
+    }
+  }, [scrollToMessageId, messages.length]);
+
+  // Auto-clear highlight after 2s
+  useEffect(() => {
+    if (!highlightedId) return;
+    const timer = setTimeout(() => setHighlightedId(null), 2000);
+    return () => clearTimeout(timer);
+  }, [highlightedId]);
+
+  // Auto-scroll to bottom on new messages (only when not targeting a specific message)
+  useEffect(() => {
+    if (scrollToMessageId) return;
+    if (didScrollToTarget.current) {
+      didScrollToTarget.current = false;
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+  }, [messages.length, scrollToMessageId]);
 
   if (isLoading && messages.length === 0) {
     return (
@@ -104,7 +132,14 @@ export function MessageList({ channelId, onOpenThread }: MessageListProps) {
         const showAvatar = shouldShowAvatar(message, previousMessage);
 
         return (
-          <div key={message.id}>
+          <div
+            key={message.id}
+            ref={(el) => {
+              if (el) messageRefs.current.set(message.id, el);
+              else messageRefs.current.delete(message.id);
+            }}
+            className={highlightedId === message.id ? 'transition-colors duration-700 bg-yellow-100' : ''}
+          >
             {showDateSeparator && (
               <div className="relative my-[10px] flex items-center">
                 <div className="flex-1 border-t border-slack-border-light" />
