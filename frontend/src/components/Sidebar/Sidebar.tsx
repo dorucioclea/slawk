@@ -63,8 +63,8 @@ export function Sidebar() {
   };
 
   const handleBrowseChannels = () => {
-    const nonMember = channels.filter((ch) => !ch.isMember && !ch.isPrivate);
-    setBrowseChannels(nonMember);
+    const publicChannels = channels.filter((ch) => !ch.isPrivate);
+    setBrowseChannels(publicChannels);
   };
 
   const handleCreateChannel = async (name: string) => {

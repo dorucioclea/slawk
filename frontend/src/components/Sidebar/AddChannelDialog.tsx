@@ -136,9 +136,13 @@ export function AddChannelDialog({
                         <span className="text-[15px] text-slack-primary">{ch.name}</span>
                         <span className="text-[12px] text-slack-hint">{ch.memberCount} members</span>
                       </div>
-                      <Button size="sm" onClick={() => onJoinChannel(ch.id)}>
-                        Join
-                      </Button>
+                      {ch.isMember ? (
+                        <span data-testid="joined-badge" className="text-[12px] text-slack-hint font-medium px-2 py-1">Joined</span>
+                      ) : (
+                        <Button size="sm" onClick={() => onJoinChannel(ch.id)}>
+                          Join
+                        </Button>
+                      )}
                     </div>
                   ))}
                 </div>
