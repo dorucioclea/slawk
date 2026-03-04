@@ -10,7 +10,7 @@ const USERS = [
     password: 'password123',
     bio: 'Frontend lead • loves React + TypeScript • coffee → code',
     status: 'online',
-    avatar: 'http://localhost:5173/ncavaglione.png',
+    avatar: '/ncavaglione.png',
   },
   {
     name: 'Bob Martinez',
