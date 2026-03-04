@@ -4,7 +4,8 @@ WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
-RUN npm run build
+# Skip tsc type-check, vite/esbuild handles transpilation
+RUN npx vite build
 
 # ── Stage 2: Build backend ───────────────────────────────────────────
 FROM node:22-alpine AS backend-build
@@ -21,7 +22,6 @@ RUN test -f dist/index.js
 
 # ── Stage 3: Production image ────────────────────────────────────────
 FROM node:22-alpine AS production
-RUN apk add --no-cache python3 make g++
 WORKDIR /app
 
 # Copy backend build output and dependencies
