@@ -3,6 +3,7 @@ import { z } from 'zod';
 import prisma from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { AuthRequest } from '../types.js';
+import { isUserOnline } from '../websocket/index.js';
 
 const router = Router();
 
@@ -119,7 +120,10 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
         });
 
         return {
-          otherUser: user,
+          otherUser: user ? {
+            ...user,
+            status: isUserOnline(user.id) ? 'online' : 'offline',
+          } : user,
           lastMessage,
           unreadCount,
         };
