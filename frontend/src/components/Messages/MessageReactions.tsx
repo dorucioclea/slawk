@@ -7,8 +7,13 @@ import { EmojiPicker } from '@/components/ui/emoji-picker';
 import type { Reaction } from '@/lib/types';
 import data from '@emoji-mart/data';
 
+const SHORTCODE_ALIASES: Record<string, string> = {
+  mind_blown: 'exploding_head',
+};
+
 function shortcodeToNative(emoji: string): string {
-  const emojiData = (data as any).emojis?.[emoji];
+  const key = SHORTCODE_ALIASES[emoji] ?? emoji;
+  const emojiData = (data as any).emojis?.[key];
   if (emojiData?.skins?.[0]?.native) return emojiData.skins[0].native;
   return emoji;
 }
