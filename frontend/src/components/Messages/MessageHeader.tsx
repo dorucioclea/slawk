@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Hash, Star, ChevronDown, Bell, Pin, Search, MoreVertical, FileText, LogOut } from 'lucide-react';
+import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { searchMessages, getChannelMembers, type SearchResult, type ChannelMember } from '@/lib/api';
 import { useChannelStore } from '@/stores/useChannelStore';
@@ -263,16 +264,30 @@ export function MessageHeader({ channel, showMembers, onToggleMembers, onToggleP
                         onClick={() => handleResultClick(result)}
                         className="w-full text-left px-3 py-2 hover:bg-slack-hover border-b border-slack-border-light last:border-b-0"
                       >
-                        <div className="flex items-center gap-1 text-xs text-slack-hint">
-                          <span className="font-medium text-slack-primary">{result.user.name}</span>
-                          {result.channel && (
-                            <>
-                              <span>in</span>
-                              <span className="font-medium">#{result.channel.name}</span>
-                            </>
-                          )}
+                        <div className="flex items-start gap-2">
+                          <Avatar
+                            src={result.user.avatar ?? undefined}
+                            alt={result.user.name}
+                            fallback={result.user.name}
+                            size="sm"
+                            className="flex-shrink-0 mt-0.5"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1 text-xs text-slack-hint">
+                              <span className="font-medium text-slack-primary">{result.user.name}</span>
+                              <span data-testid="search-result-timestamp" className="text-slack-disabled">
+                                {format(new Date(result.createdAt), 'h:mm a')}
+                              </span>
+                              {result.channel && (
+                                <>
+                                  <span>in</span>
+                                  <span className="font-medium">#{result.channel.name}</span>
+                                </>
+                              )}
+                            </div>
+                            <p className="mt-0.5 text-sm text-slack-primary line-clamp-2">{renderMessageContent(result.content)}</p>
+                          </div>
                         </div>
-                        <p className="mt-0.5 text-sm text-slack-primary line-clamp-2">{renderMessageContent(result.content)}</p>
                       </button>
                     ))}
                   </div>
