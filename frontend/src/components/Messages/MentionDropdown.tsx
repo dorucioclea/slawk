@@ -1,5 +1,6 @@
-import { forwardRef } from 'react';
+import { forwardRef, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { Avatar } from '@/components/ui/avatar';
 import type { AuthUser } from '@/lib/api';
 
 interface MentionDropdownProps {
@@ -10,6 +11,12 @@ interface MentionDropdownProps {
 
 export const MentionDropdown = forwardRef<HTMLDivElement, MentionDropdownProps>(
   function MentionDropdown({ users, selectedIndex, onSelect }, ref) {
+    const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+    useEffect(() => {
+      itemRefs.current[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+    }, [selectedIndex]);
+
     if (users.length === 0) return null;
 
     return (
@@ -21,15 +28,20 @@ export const MentionDropdown = forwardRef<HTMLDivElement, MentionDropdownProps>(
         {users.map((user, index) => (
           <button
             key={user.id}
+            ref={(el) => { itemRefs.current[index] = el; }}
             onClick={() => onSelect(user)}
             className={cn(
               'flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slack-link hover:text-white',
               index === selectedIndex ? 'bg-slack-link text-white' : 'text-slack-primary',
             )}
           >
-            <div className="flex h-6 w-6 items-center justify-center rounded bg-slack-purple text-white text-xs font-medium flex-shrink-0">
-              {user.name.charAt(0).toUpperCase()}
-            </div>
+            <Avatar
+              src={user.avatar ?? undefined}
+              alt={user.name}
+              fallback={user.name}
+              size="sm"
+              className="flex-shrink-0"
+            />
             <span className="truncate font-medium">{user.name}</span>
           </button>
         ))}

@@ -120,6 +120,11 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
   handleSendRef.current = handleSendReply;
   const mentionActiveRef = useRef(false);
   mentionActiveRef.current = showMentionDropdown;
+  const mentionUsersRef = useRef(mentionUsers);
+  mentionUsersRef.current = mentionUsers;
+  const mentionSelectedIndexRef = useRef(mentionSelectedIndex);
+  mentionSelectedIndexRef.current = mentionSelectedIndex;
+  const insertMentionRef = useRef<(user: AuthUser) => void>(() => {});
 
   useEffect(() => {
     if (!editorRef.current || quillRef.current) return;
@@ -133,7 +138,14 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
             enter: {
               key: 'Enter',
               handler: () => {
-                if (mentionActiveRef.current) return true;
+                if (mentionActiveRef.current) {
+                  const users = mentionUsersRef.current;
+                  const idx = mentionSelectedIndexRef.current;
+                  if (users.length > 0 && idx < users.length) {
+                    insertMentionRef.current(users[idx]);
+                  }
+                  return false;
+                }
                 handleSendRef.current();
                 return false;
               },
@@ -143,6 +155,30 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
               handler: () => {
                 if (mentionActiveRef.current) {
                   setShowMentionDropdown(false);
+                  return false;
+                }
+                return true;
+              },
+            },
+            arrowUp: {
+              key: 'ArrowUp',
+              handler: () => {
+                if (mentionActiveRef.current) {
+                  setMentionSelectedIndex((prev) =>
+                    prev > 0 ? prev - 1 : mentionUsersRef.current.length - 1
+                  );
+                  return false;
+                }
+                return true;
+              },
+            },
+            arrowDown: {
+              key: 'ArrowDown',
+              handler: () => {
+                if (mentionActiveRef.current) {
+                  setMentionSelectedIndex((prev) =>
+                    prev < mentionUsersRef.current.length - 1 ? prev + 1 : 0
+                  );
                   return false;
                 }
                 return true;
@@ -225,6 +261,7 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
     },
     [mentionStartIndex, mentionQuery],
   );
+  insertMentionRef.current = insertMention;
 
   const handleMentionButtonClick = () => {
     const quill = quillRef.current;
