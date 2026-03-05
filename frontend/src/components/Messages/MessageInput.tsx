@@ -244,6 +244,15 @@ export function MessageInput({ placeholder, onSend, sendError, clearSendError, c
     }
   }, [placeholder]);
 
+  // Clear editor content when switching channels
+  useEffect(() => {
+    if (quillRef.current && channelId !== undefined) {
+      quillRef.current.setText('');
+      setPendingFiles([]);
+      setCanSend(false);
+    }
+  }, [channelId]);
+
   const handleEmojiSelect = useCallback((emoji: { native: string }) => {
     const quill = quillRef.current;
     if (!quill) return;
