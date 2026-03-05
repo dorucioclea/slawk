@@ -90,7 +90,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
   });
 
   io.on('connection', async (socket: AuthenticatedSocket) => {
-    console.log(`User ${socket.user?.email} connected`);
+    console.log(`User ${socket.user?.userId} connected`);
 
     // Track user presence
     if (socket.user) {
@@ -142,13 +142,13 @@ export function initializeWebSocket(httpServer: HttpServer) {
       }
 
       socket.join(`channel:${channelId}`);
-      console.log(`User ${socket.user.email} joined channel ${channelId}`);
+      console.log(`User ${socket.user.userId} joined channel ${channelId}`);
     });
 
     // Leave channel room
     socket.on('leave:channel', (channelId: number) => {
       socket.leave(`channel:${channelId}`);
-      console.log(`User ${socket.user?.email} left channel ${channelId}`);
+      console.log(`User ${socket.user?.userId} left channel ${channelId}`);
     });
 
     // Send message
@@ -378,7 +378,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
       // Create a consistent room name regardless of who initiates
       const roomId = [socket.user.userId, otherUserId].sort().join('-');
       socket.join(`dm:${roomId}`);
-      console.log(`User ${socket.user.email} joined DM room ${roomId}`);
+      console.log(`User ${socket.user.userId} joined DM room ${roomId}`);
     });
 
     // Leave DM conversation room
@@ -387,7 +387,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
 
       const roomId = [socket.user.userId, otherUserId].sort().join('-');
       socket.leave(`dm:${roomId}`);
-      console.log(`User ${socket.user?.email} left DM room ${roomId}`);
+      console.log(`User ${socket.user?.userId} left DM room ${roomId}`);
     });
 
     // Send DM via WebSocket
@@ -464,7 +464,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
     });
 
     socket.on('disconnect', async () => {
-      console.log(`User ${socket.user?.email} disconnected`);
+      console.log(`User ${socket.user?.userId} disconnected`);
 
       if (socket.user) {
         const userId = socket.user.userId;
