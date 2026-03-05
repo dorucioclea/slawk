@@ -61,79 +61,69 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
 
-    // Get all users the current user has DM conversations with
-    const sentDMs = await prisma.directMessage.findMany({
-      where: {
-        fromUserId: userId,
-        deletedAt: null,
-      },
-      select: { toUserId: true },
-      distinct: ['toUserId'],
-    });
+    // Single query: get all conversations with last message and unread count
+    const conversations: any[] = await prisma.$queryRaw`
+      WITH conversation_partners AS (
+        SELECT DISTINCT
+          CASE WHEN "fromUserId" = ${userId} THEN "toUserId" ELSE "fromUserId" END AS "otherUserId"
+        FROM "DirectMessage"
+        WHERE ("fromUserId" = ${userId} OR "toUserId" = ${userId})
+          AND "deletedAt" IS NULL
+      ),
+      last_messages AS (
+        SELECT DISTINCT ON (other_id)
+          dm.id,
+          dm.content,
+          dm."fromUserId",
+          dm."toUserId",
+          dm."createdAt",
+          dm."updatedAt",
+          dm."editedAt",
+          dm."deletedAt",
+          dm."readAt",
+          CASE WHEN dm."fromUserId" = ${userId} THEN dm."toUserId" ELSE dm."fromUserId" END AS other_id
+        FROM "DirectMessage" dm
+        WHERE (dm."fromUserId" = ${userId} OR dm."toUserId" = ${userId})
+          AND dm."deletedAt" IS NULL
+        ORDER BY other_id, dm."createdAt" DESC
+      ),
+      unread_counts AS (
+        SELECT "fromUserId" AS "otherUserId", COUNT(*)::int AS "unreadCount"
+        FROM "DirectMessage"
+        WHERE "toUserId" = ${userId}
+          AND "deletedAt" IS NULL
+          AND "readAt" IS NULL
+        GROUP BY "fromUserId"
+      )
+      SELECT
+        jsonb_build_object(
+          'id', u.id, 'name', u.name, 'email', u.email, 'avatar', u.avatar, 'status', u.status
+        ) AS "otherUser",
+        jsonb_build_object(
+          'id', lm.id, 'content', lm.content, 'fromUserId', lm."fromUserId",
+          'toUserId', lm."toUserId", 'createdAt', lm."createdAt",
+          'updatedAt', lm."updatedAt", 'editedAt', lm."editedAt",
+          'deletedAt', lm."deletedAt", 'readAt', lm."readAt"
+        ) AS "lastMessage",
+        COALESCE(uc."unreadCount", 0) AS "unreadCount"
+      FROM conversation_partners cp
+      JOIN "User" u ON u.id = cp."otherUserId"
+      LEFT JOIN last_messages lm ON lm.other_id = cp."otherUserId"
+      LEFT JOIN unread_counts uc ON uc."otherUserId" = cp."otherUserId"
+      ORDER BY lm."createdAt" DESC NULLS LAST
+    `;
 
-    const receivedDMs = await prisma.directMessage.findMany({
-      where: {
-        toUserId: userId,
-        deletedAt: null,
-      },
-      select: { fromUserId: true },
-      distinct: ['fromUserId'],
-    });
+    // Apply online status from WebSocket tracking
+    const result = conversations.map((conv) => ({
+      otherUser: conv.otherUser ? {
+        ...conv.otherUser,
+        status: isUserOnline(conv.otherUser.id) ? 'online' : 'offline',
+      } : conv.otherUser,
+      lastMessage: conv.lastMessage,
+      unreadCount: Number(conv.unreadCount),
+    }));
 
-    // Get unique user IDs
-    const userIds = new Set<number>();
-    sentDMs.forEach((dm) => userIds.add(dm.toUserId));
-    receivedDMs.forEach((dm) => userIds.add(dm.fromUserId));
-
-    // Get conversations with each user
-    const conversations = await Promise.all(
-      Array.from(userIds).map(async (otherUserId) => {
-        const user = await prisma.user.findUnique({
-          where: { id: otherUserId },
-          select: { id: true, name: true, email: true, avatar: true, status: true },
-        });
-
-        // Get the last message
-        const lastMessage = await prisma.directMessage.findFirst({
-          where: {
-            OR: [
-              { fromUserId: userId, toUserId: otherUserId },
-              { fromUserId: otherUserId, toUserId: userId },
-            ],
-            deletedAt: null,
-          },
-          orderBy: { createdAt: 'desc' },
-        });
-
-        // Count unread messages (messages sent TO the current user that haven't been read)
-        const unreadCount = await prisma.directMessage.count({
-          where: {
-            fromUserId: otherUserId,
-            toUserId: userId,
-            deletedAt: null,
-            readAt: null,
-          },
-        });
-
-        return {
-          otherUser: user ? {
-            ...user,
-            status: isUserOnline(user.id) ? 'online' : 'offline',
-          } : user,
-          lastMessage,
-          unreadCount,
-        };
-      })
-    );
-
-    // Sort by last message date
-    conversations.sort((a, b) => {
-      if (!a.lastMessage) return 1;
-      if (!b.lastMessage) return -1;
-      return b.lastMessage.createdAt.getTime() - a.lastMessage.createdAt.getTime();
-    });
-
-    res.json(conversations);
+    res.json(result);
   } catch (error) {
     console.error('Get DM conversations error:', error);
     res.status(500).json({ error: 'Failed to get DM conversations' });
