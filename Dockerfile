@@ -1,28 +1,21 @@
-# ── Stage 1: Build frontend ──────────────────────────────────────────
-FROM node:22-alpine AS frontend-build
+ARG BASE_IMAGE=us-central1-docker.pkg.dev/ncvgl-gcp/cloud-run-source-deploy/slawk-base:latest
+
+# ── Stage 1: Build frontend (deps from base) ────────────────────────
+FROM ${BASE_IMAGE} AS frontend-build
 WORKDIR /app/frontend
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
 COPY frontend/ ./
-# Skip tsc type-check, vite/esbuild handles transpilation
 RUN npx vite build
 
-# ── Stage 2: Build backend ───────────────────────────────────────────
-FROM node:22-alpine AS backend-build
-# bcrypt needs python3, make, g++
-RUN apk add --no-cache python3 make g++
+# ── Stage 2: Build backend (deps from base) ─────────────────────────
+FROM ${BASE_IMAGE} AS backend-build
 WORKDIR /app/backend
-COPY backend/package.json backend/package-lock.json ./
-RUN npm ci
 COPY backend/ ./
 RUN npx prisma generate
-# tsc emits JS even with Express 5 strict type warnings (exit code non-zero)
 RUN npx tsc || true
 RUN test -f dist/index.js
 
 # ── Stage 3: Production image ────────────────────────────────────────
 FROM node:22-alpine AS production
-# Prisma needs OpenSSL at runtime
 RUN apk add --no-cache openssl
 WORKDIR /app
 
