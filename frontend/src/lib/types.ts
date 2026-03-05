@@ -32,6 +32,7 @@ export interface Reaction {
   emoji: string;
   count: number;
   userIds: number[];
+  userNames: string[];
 }
 
 export interface MessageFile {

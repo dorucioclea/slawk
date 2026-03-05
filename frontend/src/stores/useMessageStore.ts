@@ -8,14 +8,17 @@ function transformApiMessage(msg: api.ApiMessage): Message {
   const reactionMap = new Map<string, Reaction>();
   for (const r of msg.reactions ?? []) {
     const existing = reactionMap.get(r.emoji);
+    const userName = (r as any).user?.name ?? '';
     if (existing) {
       existing.count++;
       existing.userIds.push(r.userId);
+      existing.userNames.push(userName);
     } else {
       reactionMap.set(r.emoji, {
         emoji: r.emoji,
         count: 1,
         userIds: [r.userId],
+        userNames: [userName],
       });
     }
   }
@@ -201,14 +204,14 @@ export const useMessageStore = create<MessageState>((set, get) => ({
             ...msg,
             reactions: msg.reactions.map((r) =>
               r.emoji === emoji
-                ? { ...r, count: r.count + 1, userIds: [...r.userIds, userId] }
+                ? { ...r, count: r.count + 1, userIds: [...r.userIds, userId], userNames: [...r.userNames, 'You'] }
                 : r,
             ),
           };
         }
         return {
           ...msg,
-          reactions: [...msg.reactions, { emoji, count: 1, userIds: [userId] }],
+          reactions: [...msg.reactions, { emoji, count: 1, userIds: [userId], userNames: ['You'] }],
         };
       }),
     });
@@ -236,8 +239,10 @@ export const useMessageStore = create<MessageState>((set, get) => ({
           reactions: msg.reactions
             .map((r) => {
               if (r.emoji !== emoji) return r;
+              const idx = r.userIds.indexOf(userId);
               const newUserIds = r.userIds.filter((id) => id !== userId);
-              return { ...r, count: newUserIds.length, userIds: newUserIds };
+              const newUserNames = r.userNames.filter((_, i) => i !== idx);
+              return { ...r, count: newUserIds.length, userIds: newUserIds, userNames: newUserNames };
             })
             .filter((r) => r.count > 0),
         };

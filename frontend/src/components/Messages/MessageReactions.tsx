@@ -46,10 +46,15 @@ export function MessageReactions({ reactions, messageId }: MessageReactionsProps
     <div className="relative mt-[6px] inline-flex flex-wrap items-center gap-[4px]">
       {reactions.map((reaction) => {
         const hasReacted = reaction.userIds.includes(currentUserId);
+        const names = reaction.userNames.filter(Boolean);
+        const tooltip = names.length > 0
+          ? `${names.join(', ')} reacted with ${shortcodeToNative(reaction.emoji)}`
+          : undefined;
         return (
           <button
             key={reaction.emoji}
             onClick={() => handleReactionClick(reaction.emoji, hasReacted)}
+            title={tooltip}
             className={cn(
               'inline-flex h-[22px] items-center gap-1 rounded-[12px] border px-[6px] text-[12px] transition-colors',
               hasReacted
