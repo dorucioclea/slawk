@@ -144,6 +144,7 @@ export interface ApiMessage {
   reactions: ApiReaction[];
   files: { id: number; filename: string; originalName: string; mimetype: string; size: number; url: string }[];
   _count: { replies: number };
+  threadParticipants?: { id: number; name: string; avatar: string | null }[];
 }
 
 export interface MessagesResponse {
@@ -418,6 +419,13 @@ export interface ChannelMember {
 
 export function getChannelMembers(channelId: number) {
   return request<ChannelMember[]>(`/channels/${channelId}/members`);
+}
+
+export function addChannelMember(channelId: number, userId: number) {
+  return request<{ message: string }>(`/channels/${channelId}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
 }
 
 // ---- Scheduled Messages ----

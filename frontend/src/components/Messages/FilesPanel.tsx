@@ -3,6 +3,7 @@ import { X, FileText, FileImage, FileArchive, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { getChannelFiles, getUserFiles, getAuthFileUrl, type ApiFileWithUser } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { ImageLightbox } from './ImageLightbox';
 
 interface FilesPanelProps {
   channelId?: number;
@@ -27,6 +28,8 @@ export function FilesPanel({ channelId, onClose, title }: FilesPanelProps) {
   const [files, setFiles] = useState<ApiFileWithUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [lightboxAlt, setLightboxAlt] = useState('');
 
   const fetchFiles = useCallback(() => {
     setIsLoading(true);
@@ -68,27 +71,39 @@ export function FilesPanel({ channelId, onClose, title }: FilesPanelProps) {
           files.map((file) => (
             <div key={file.id} className="border-b border-slack-border-light px-4 py-3">
               {file.mimetype.startsWith('image/') ? (
-                <a href={getAuthFileUrl(file.url)} target="_blank" rel="noopener noreferrer" className="block mb-2">
+                <button
+                  onClick={() => { setLightboxSrc(getAuthFileUrl(file.url)); setLightboxAlt(file.originalName); }}
+                  className="block mb-2 w-full cursor-zoom-in focus:outline-none"
+                >
                   <img
                     src={getAuthFileUrl(file.url)}
                     alt={file.originalName}
                     className="w-full max-h-[140px] rounded object-cover"
                   />
-                </a>
+                </button>
               ) : null}
               <div className="flex items-start gap-2">
                 <div className="mt-0.5 flex-shrink-0">
                   <FileIcon mimetype={file.mimetype} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <a
-                    href={getAuthFileUrl(file.url)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-[13px] font-medium text-slack-link hover:underline truncate"
-                  >
-                    {file.originalName}
-                  </a>
+                  {file.mimetype.startsWith('image/') ? (
+                    <button
+                      onClick={() => { setLightboxSrc(getAuthFileUrl(file.url)); setLightboxAlt(file.originalName); }}
+                      className="block text-[13px] font-medium text-slack-link hover:underline truncate text-left"
+                    >
+                      {file.originalName}
+                    </button>
+                  ) : (
+                    <a
+                      href={getAuthFileUrl(file.url)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block text-[13px] font-medium text-slack-link hover:underline truncate"
+                    >
+                      {file.originalName}
+                    </a>
+                  )}
                   <p className="text-[11px] text-slack-secondary">
                     {formatBytes(file.size)} &middot; {file.user.name} &middot;{' '}
                     {format(new Date(file.createdAt), 'MMM d, yyyy')}
@@ -107,6 +122,14 @@ export function FilesPanel({ channelId, onClose, title }: FilesPanelProps) {
           ))
         )}
       </div>
+
+      {lightboxSrc && (
+        <ImageLightbox
+          src={lightboxSrc}
+          alt={lightboxAlt}
+          onClose={() => setLightboxSrc(null)}
+        />
+      )}
     </div>
   );
 }

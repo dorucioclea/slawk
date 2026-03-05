@@ -291,6 +291,50 @@ router.get('/:id/members', authMiddleware, requireChannelMembership, async (req:
   }
 });
 
+// POST /channels/:id/members - Add a user to a channel
+router.post('/:id/members', authMiddleware, requireChannelMembership, async (req: AuthRequest, res: Response) => {
+  try {
+    const channelId = req.channelId!;
+    const { userId } = req.body;
+
+    if (!userId || typeof userId !== 'number') {
+      res.status(400).json({ error: 'userId is required' });
+      return;
+    }
+
+    // Check user exists
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // Check not already a member
+    const existing = await prisma.channelMember.findUnique({
+      where: { userId_channelId: { userId, channelId } },
+    });
+    if (existing) {
+      res.status(400).json({ error: 'User is already a member' });
+      return;
+    }
+
+    await prisma.channelMember.create({
+      data: { userId, channelId },
+    });
+
+    await prisma.channelRead.upsert({
+      where: { userId_channelId: { userId, channelId } },
+      create: { userId, channelId, lastReadMessageId: null },
+      update: {},
+    });
+
+    res.json({ message: 'Member added successfully' });
+  } catch (error) {
+    console.error('Add member error:', error);
+    res.status(500).json({ error: 'Failed to add member' });
+  }
+});
+
 // POST /channels/:id/read - Mark channel as read
 const markReadSchema = z.object({
   messageId: z.number().int().positive(),

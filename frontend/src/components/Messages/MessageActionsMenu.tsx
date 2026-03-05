@@ -1,4 +1,4 @@
-import { Pin, Pencil, Trash2 } from 'lucide-react';
+import { Pin, Pencil, Trash2, MailOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
@@ -7,6 +7,7 @@ interface MessageActionsMenuProps {
   isPinned?: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
+  onMarkUnread?: () => void;
   showOwnerActions: boolean;
   className?: string;
   testIdPrefix?: string;
@@ -17,11 +18,12 @@ export function MessageActionsMenu({
   isPinned,
   onEdit,
   onDelete,
+  onMarkUnread,
   showOwnerActions,
   className,
   testIdPrefix,
 }: MessageActionsMenuProps) {
-  const hasAnyAction = onPin || showOwnerActions;
+  const hasAnyAction = onPin || showOwnerActions || onMarkUnread;
 
   if (!hasAnyAction) {
     return (
@@ -47,6 +49,12 @@ export function MessageActionsMenu({
         className,
       )}
     >
+      {onMarkUnread && (
+        <Button variant="menu-item" onClick={onMarkUnread}>
+          <MailOpen className="h-4 w-4" />
+          Mark as unread
+        </Button>
+      )}
       {onPin && (
         <Button variant="menu-item" onClick={onPin}>
           <Pin className="h-4 w-4" />

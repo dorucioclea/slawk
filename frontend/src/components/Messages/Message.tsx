@@ -9,6 +9,7 @@ import { useMessageStore } from '@/stores/useMessageStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { useBookmarkStore } from '@/stores/useBookmarkStore';
+import { useChannelStore } from '@/stores/useChannelStore';
 import { useMessageActions } from '@/hooks/useMessageActions';
 import { useMessageHover } from '@/hooks/useMessageHover';
 import { useMessageEdit } from '@/hooks/useMessageEdit';
@@ -37,6 +38,7 @@ export function Message({ message, showAvatar, isCompact, onOpenThread }: Messag
   const toggleBookmark = useBookmarkStore((s) => s.toggle);
   const isBookmarked = useBookmarkStore((s) => s.bookmarkedIds.has(message.id));
   const { togglePin } = useMessageActions();
+  const incrementUnread = useChannelStore((s) => s.incrementUnread);
   const { isHovered, onMouseEnter, onMouseLeave } = useMessageHover();
   const {
     editingId, editContent, setEditContent, editInputRef,
@@ -200,21 +202,30 @@ export function Message({ message, showAvatar, isCompact, onOpenThread }: Messag
                     </div>
                   </div>
                 ) : (
-                  <a
-                    href={getAuthFileUrl(file.url)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-3 py-2 hover:bg-slack-hover"
-                  >
-                    <FileIcon className="h-5 w-5 text-slack-hint flex-shrink-0" />
-                    <span className="text-[13px] text-slack-link hover:underline truncate max-w-[200px]">
-                      {file.originalName}
-                    </span>
-                    <span className="text-[11px] text-slack-disabled flex-shrink-0">
-                      {formatFileSize(file.size)}
-                    </span>
-                    <Download className="h-4 w-4 text-slack-disabled flex-shrink-0" />
-                  </a>
+                  <div className="flex items-center gap-3 px-3 py-2.5 border-l-4 border-slack-link">
+                    <FileIcon className="h-8 w-8 text-slack-link flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <a
+                        href={getAuthFileUrl(file.url)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-[13px] font-medium text-slack-link hover:underline truncate"
+                      >
+                        {file.originalName}
+                      </a>
+                      <span className="text-[11px] text-slack-disabled">
+                        {formatFileSize(file.size)}
+                      </span>
+                    </div>
+                    <a
+                      href={getAuthFileUrl(file.url)}
+                      download={file.originalName}
+                      className="flex-shrink-0 text-slack-disabled hover:text-slack-primary"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Download className="h-4 w-4" />
+                    </a>
+                  </div>
                 )}
               </div>
             ))}
@@ -286,6 +297,10 @@ export function Message({ message, showAvatar, isCompact, onOpenThread }: Messag
       {showMoreMenu && (
         <MessageActionsMenu
           className="absolute -top-4 right-5 mt-9 z-50"
+          onMarkUnread={() => {
+            setShowMoreMenu(false);
+            incrementUnread(message.channelId);
+          }}
           onPin={() => {
             setShowMoreMenu(false);
             togglePin(message.id, message.isPinned);

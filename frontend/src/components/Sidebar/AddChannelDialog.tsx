@@ -131,12 +131,14 @@ export function AddChannelDialog({
                     <div
                       key={ch.id}
                       data-channel-name={ch.name}
-                      className="flex items-center justify-between rounded px-3 py-2 hover:bg-slack-hover cursor-pointer"
+                      className={cn(
+                        "flex items-center justify-between rounded px-3 py-2 hover:bg-slack-hover",
+                        ch.isMember && "cursor-pointer"
+                      )}
                       onClick={() => {
                         if (ch.isMember) {
                           onNavigateToChannel(ch.id);
-                        } else {
-                          onJoinChannel(ch.id).then(() => onNavigateToChannel(ch.id));
+                          handleClose();
                         }
                       }}
                     >
@@ -148,7 +150,7 @@ export function AddChannelDialog({
                       {ch.isMember ? (
                         <span data-testid="joined-badge" className="text-[12px] text-slack-hint font-medium px-2 py-1">Joined</span>
                       ) : (
-                        <Button size="sm" onClick={(e) => { e.stopPropagation(); onJoinChannel(ch.id); }}>
+                        <Button size="sm" onClick={() => { onJoinChannel(ch.id).then(() => { onNavigateToChannel(ch.id); handleClose(); }); }}>
                           Join
                         </Button>
                       )}

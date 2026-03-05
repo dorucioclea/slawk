@@ -150,7 +150,25 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     const message = transformApiMessage(msg);
     // Only add to messages list if it belongs to the currently loaded channel
     if (message.channelId === get().loadedChannelId) {
-      set((state) => ({ messages: [...state.messages, message] }));
+      // If this is a reply, update the parent message's threadCount and threadParticipants
+      if (msg.threadId) {
+        set((state) => ({
+          messages: state.messages.map((m) => {
+            if (m.id !== msg.threadId) return m;
+            const participant = { id: msg.user.id, name: msg.user.name, avatar: msg.user.avatar ?? null };
+            const alreadyParticipant = m.threadParticipants?.some((p) => p.id === participant.id);
+            return {
+              ...m,
+              threadCount: m.threadCount + 1,
+              threadParticipants: alreadyParticipant
+                ? m.threadParticipants
+                : [...(m.threadParticipants ?? []), participant],
+            };
+          }),
+        }));
+      } else {
+        set((state) => ({ messages: [...state.messages, message] }));
+      }
     }
   },
 
