@@ -13,6 +13,11 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const type = req.query.type as string; // 'messages', 'dms', or 'all' (default)
     const channelId = req.query.channelId ? parseInt(req.query.channelId as string) : undefined;
 
+    if (channelId !== undefined && isNaN(channelId)) {
+      res.status(400).json({ error: 'Invalid channelId' });
+      return;
+    }
+
     if (!query || query.length < 2) {
       res.status(400).json({ error: 'Search query must be at least 2 characters' });
       return;

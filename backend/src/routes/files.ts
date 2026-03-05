@@ -115,7 +115,13 @@ router.post('/', authMiddleware, upload.single('file'), async (req: AuthRequest,
       return;
     }
 
-    const messageId = req.body?.messageId ? parseInt(req.body.messageId) : undefined;
+    const rawMessageId = req.body?.messageId ? parseInt(req.body.messageId) : undefined;
+    if (rawMessageId !== undefined && isNaN(rawMessageId)) {
+      fs.unlinkSync(file.path);
+      res.status(400).json({ error: 'Invalid messageId' });
+      return;
+    }
+    const messageId = rawMessageId;
 
     // If messageId is provided, verify user has access to the channel
     if (messageId) {

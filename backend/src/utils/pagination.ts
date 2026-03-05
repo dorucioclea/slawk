@@ -1,7 +1,7 @@
 import { Request } from 'express';
 
 export function parsePagination(req: Request): { limit: number; cursor: number | undefined } {
-  const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+  const limit = Math.max(1, Math.min(parseInt(req.query.limit as string) || 50, 100));
   const cursor = req.query.cursor ? parseInt(req.query.cursor as string) : undefined;
   return { limit, cursor };
 }
