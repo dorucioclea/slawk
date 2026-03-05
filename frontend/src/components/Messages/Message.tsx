@@ -30,6 +30,7 @@ interface MessageProps {
 export function Message({ message, showAvatar, isCompact, onOpenThread }: MessageProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [lightboxAlt, setLightboxAlt] = useState<string>('');
   const { addReaction, editMessage, deleteMessage } = useMessageStore();
@@ -56,8 +57,13 @@ export function Message({ message, showAvatar, isCompact, onOpenThread }: Messag
     setShowMoreMenu(false);
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     setShowMoreMenu(false);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    setShowDeleteConfirm(false);
     await deleteMessage(message.id);
   };
 
@@ -348,6 +354,38 @@ export function Message({ message, showAvatar, isCompact, onOpenThread }: Messag
           alt={lightboxAlt}
           onClose={() => setLightboxSrc(null)}
         />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50" onClick={() => setShowDeleteConfirm(false)}>
+          <div
+            data-testid="delete-confirm-dialog"
+            className="w-[400px] rounded-xl bg-white shadow-xl p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-[17px] font-bold text-slack-primary mb-2">Delete message</h3>
+            <p className="text-[14px] text-slack-secondary mb-4">
+              Are you sure you want to delete this message? This can't be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                data-testid="delete-cancel-btn"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 text-[14px] font-medium text-slack-primary rounded-md border border-slack-border hover:bg-slack-hover"
+              >
+                Cancel
+              </button>
+              <button
+                data-testid="delete-confirm-btn"
+                onClick={confirmDelete}
+                className="px-4 py-2 text-[14px] font-medium text-white rounded-md bg-red-600 hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
