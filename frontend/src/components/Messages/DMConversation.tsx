@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { format, isToday, isYesterday } from 'date-fns';
 import {
   Pin,
@@ -44,6 +45,7 @@ const dmHeaderTabs = [
 const EMPTY_MESSAGES: DMMessage[] = [];
 
 export function DMConversation({ userId, userName, userAvatar }: DMConversationProps) {
+  const navigate = useNavigate();
   const messages = useDMStore((s) => s.messages[userId]) ?? EMPTY_MESSAGES;
   const isLoading = useDMStore((s) => s.isLoading);
   const loadError = useDMStore((s) => s.loadError);
@@ -184,6 +186,8 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
   const handleSearchResultClick = (result: SearchResult) => {
     if (result.channel) {
       setActiveChannel(result.channel.id, result.id);
+    } else if (result.participant) {
+      navigate(`/d/${result.participant.id}`);
     }
     setSearchQuery('');
     setShowSearchResults(false);

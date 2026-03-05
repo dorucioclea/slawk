@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Hash, Star, ChevronDown, Bell, Pin, Search, MoreVertical, FileText, LogOut } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -25,6 +26,7 @@ const headerTabs = [
 ];
 
 export function MessageHeader({ channel, showMembers, onToggleMembers, onTogglePins, showPins, onToggleFiles, showFiles }: MessageHeaderProps) {
+  const navigate = useNavigate();
   const toggleStar = useChannelStore((s) => s.toggleStar);
   const leaveChannel = useChannelStore((s) => s.leaveChannel);
   const setActiveChannel = useChannelStore((s) => s.setActiveChannel);
@@ -161,6 +163,8 @@ export function MessageHeader({ channel, showMembers, onToggleMembers, onToggleP
   const handleResultClick = (result: SearchResult) => {
     if (result.channel) {
       setActiveChannel(result.channel.id, result.id);
+    } else if (result.participant) {
+      navigate(`/d/${result.participant.id}`);
     }
     setSearchQuery('');
     setShowResults(false);
