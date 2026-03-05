@@ -7,7 +7,7 @@ interface MessageToolbarProps {
   onThreadClick?: () => void;
   onBookmarkClick?: () => void;
   isBookmarked?: boolean;
-  onMoreClick: () => void;
+  onMoreClick?: () => void;
   className?: string;
   testIdPrefix?: string;
 }
@@ -65,15 +65,17 @@ export function MessageToolbar({
           />
         </Button>
       )}
-      <Button
-        variant="toolbar"
-        size="icon-sm"
-        data-testid={testIdPrefix ? `${testIdPrefix}-more-btn` : undefined}
-        title="More actions"
-        onClick={onMoreClick}
-      >
-        <MoreHorizontal className="h-4 w-4 text-slack-secondary" />
-      </Button>
+      {onMoreClick && (
+        <Button
+          variant="toolbar"
+          size="icon-sm"
+          data-testid={testIdPrefix ? `${testIdPrefix}-more-btn` : undefined}
+          title="More actions"
+          onClick={onMoreClick}
+        >
+          <MoreHorizontal className="h-4 w-4 text-slack-secondary" />
+        </Button>
+      )}
     </div>
   );
 }

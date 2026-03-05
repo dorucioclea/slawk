@@ -422,6 +422,8 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
                         </div>
                       )}
                       <div
+                        data-testid={`dm-message-${msg.id}`}
+                        data-from={msg.fromUserId}
                         className={cn(
                           'group relative flex px-0 hover:bg-slack-hover',
                           showAvatar ? 'pb-2 pt-4' : 'py-0.5',
@@ -516,11 +518,10 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
                             onThreadClick={() => {
                               // Threads on DMs not supported yet
                             }}
-                            onMoreClick={() =>
+                            onMoreClick={isOwner ? () =>
                               setShowMoreMenuId((prev) =>
                                 prev === msg.id ? null : msg.id,
-                              )
-                            }
+                              ) : undefined}
                           />
                         )}
 
