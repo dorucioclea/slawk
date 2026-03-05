@@ -52,8 +52,8 @@ describe('Security - Channel Access Control', () => {
         .get(`/channels/${privateChannelId}`)
         .set('Authorization', `Bearer ${user2Token}`);
 
-      expect(res.status).toBe(403);
-      expect(res.body.error).toBe('Access denied');
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe('Channel not found');
     });
 
     it('should allow member to view private channel details', async () => {
@@ -72,8 +72,8 @@ describe('Security - Channel Access Control', () => {
         .post(`/channels/${privateChannelId}/join`)
         .set('Authorization', `Bearer ${user2Token}`);
 
-      expect(res.status).toBe(403);
-      expect(res.body.error).toBe('Cannot join private channel without invite');
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe('Channel not found');
     });
 
     it('should allow joining public channel', async () => {

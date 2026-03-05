@@ -164,7 +164,7 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (channel.isPrivate) {
       const isMember = channel.members.some(m => m.userId === userId);
       if (!isMember) {
-        res.status(403).json({ error: 'Access denied' });
+        res.status(404).json({ error: 'Channel not found' });
         return;
       }
     }
@@ -197,7 +197,7 @@ router.post('/:id/join', authMiddleware, async (req: AuthRequest, res: Response)
 
     // Prevent joining private channels without invite
     if (channel.isPrivate) {
-      res.status(403).json({ error: 'Cannot join private channel without invite' });
+      res.status(404).json({ error: 'Channel not found' });
       return;
     }
 
