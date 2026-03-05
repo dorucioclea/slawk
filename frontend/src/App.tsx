@@ -139,11 +139,22 @@ function AppShell() {
       updateDMStatus(data.userId, data.status as import('@/lib/types').DirectMessage['userStatus']);
     };
 
+    const handleMemberAdded = (data: { channelId: number; memberCount: number }) => {
+      useChannelStore.getState().updateMemberCount(data.channelId, data.memberCount);
+    };
+
+    const handleChannelJoined = () => {
+      // Re-fetch channels so the new channel appears in the sidebar
+      useChannelStore.getState().fetchChannels();
+    };
+
     socket.on('message:new', handleNewMessage);
     socket.on('message:updated', handleUpdatedMessage);
     socket.on('message:deleted', handleDeletedMessage);
     socket.on('dm:new', handleNewDM);
     socket.on('presence:update', handlePresenceUpdate);
+    socket.on('channel:member-added', handleMemberAdded);
+    socket.on('channel:joined', handleChannelJoined);
 
     return () => {
       socket.off('message:new', handleNewMessage);
@@ -151,6 +162,8 @@ function AppShell() {
       socket.off('message:deleted', handleDeletedMessage);
       socket.off('dm:new', handleNewDM);
       socket.off('presence:update', handlePresenceUpdate);
+      socket.off('channel:member-added', handleMemberAdded);
+      socket.off('channel:joined', handleChannelJoined);
       disconnectSocket();
     };
   }, []);

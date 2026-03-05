@@ -4,7 +4,7 @@ import prisma from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requireChannelMembership } from '../middleware/authorize.js';
 import { AuthRequest } from '../types.js';
-import { isUserOnline } from '../websocket/index.js';
+import { isUserOnline, getIO } from '../websocket/index.js';
 import { USER_SELECT_BASIC, USER_SELECT_FULL, MESSAGE_INCLUDE_FULL } from '../db/selects.js';
 
 const router = Router();
@@ -328,6 +328,25 @@ router.post('/:id/members', authMiddleware, requireChannelMembership, async (req
       update: {},
     });
 
+    // Get updated member count
+    const memberCount = await prisma.channelMember.count({ where: { channelId } });
+
+    // Notify all channel members (including the newly added user) via WebSocket
+    const io = getIO();
+    if (io) {
+      // Notify existing channel members about the updated count
+      io.to(`channel:${channelId}`).emit('channel:member-added', {
+        channelId,
+        userId,
+        memberCount,
+      });
+      // Notify the added user so their sidebar refreshes
+      io.to(`user:${userId}`).emit('channel:joined', {
+        channelId,
+        memberCount,
+      });
+    }
+
     res.json({ message: 'Member added successfully' });
   } catch (error) {
     console.error('Add member error:', error);
@@ -370,6 +389,47 @@ router.post('/:id/read', authMiddleware, requireChannelMembership, async (req: A
     }
     console.error('Mark channel read error:', error);
     res.status(500).json({ error: 'Failed to mark channel as read' });
+  }
+});
+
+// POST /channels/:id/unread - Mark channel as unread from a specific message
+const markUnreadSchema = z.object({
+  messageId: z.number().int().positive(),
+});
+
+router.post('/:id/unread', authMiddleware, requireChannelMembership, async (req: AuthRequest, res: Response) => {
+  try {
+    const channelId = req.channelId!;
+    const userId = req.user!.userId;
+    const { messageId } = markUnreadSchema.parse(req.body);
+
+    // Find the message just before this one in the channel
+    const previousMessage = await prisma.message.findFirst({
+      where: {
+        channelId,
+        threadId: null,
+        deletedAt: null,
+        id: { lt: messageId },
+      },
+      orderBy: { id: 'desc' },
+      select: { id: true },
+    });
+
+    // Set lastReadMessageId to the previous message (or null if this is the first message)
+    await prisma.channelRead.upsert({
+      where: { userId_channelId: { userId, channelId } },
+      create: { userId, channelId, lastReadMessageId: previousMessage?.id ?? null },
+      update: { lastReadMessageId: previousMessage?.id ?? null },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: error.issues });
+      return;
+    }
+    console.error('Mark channel unread error:', error);
+    res.status(500).json({ error: 'Failed to mark channel as unread' });
   }
 });
 

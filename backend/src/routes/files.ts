@@ -49,6 +49,10 @@ const upload = multer({
       'application/json',
       'application/zip',
       'application/x-zip-compressed',
+      'audio/webm',
+      'audio/ogg',
+      'audio/mp4',
+      'audio/mpeg',
     ];
     if (allowedMimes.includes(file.mimetype)) {
       cb(null, true);

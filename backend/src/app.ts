@@ -28,6 +28,7 @@ app.use(helmet({
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
       'img-src': ["'self'", 'data:', 'blob:', 'https://randomuser.me', 'https://storage.googleapis.com'],
       'connect-src': ["'self'", 'wss:', 'ws:'],
+      'media-src': ["'self'", 'blob:', 'https://storage.googleapis.com'],
     },
   },
   crossOriginEmbedderPolicy: false,

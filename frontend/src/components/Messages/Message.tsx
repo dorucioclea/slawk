@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { FileIcon, Download, Pin } from 'lucide-react';
+import { FileIcon, Download, Pin, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar } from '@/components/ui/avatar';
 import { EmojiPicker } from '@/components/ui/emoji-picker';
@@ -14,7 +14,7 @@ import { useMessageActions } from '@/hooks/useMessageActions';
 import { useMessageHover } from '@/hooks/useMessageHover';
 import { useMessageEdit } from '@/hooks/useMessageEdit';
 import type { Message as MessageType } from '@/lib/types';
-import { getAuthFileUrl, getUsers } from '@/lib/api';
+import { getAuthFileUrl, getUsers, markChannelUnread } from '@/lib/api';
 import { renderMessageContent } from '@/lib/renderMessageContent';
 import { ImageLightbox } from './ImageLightbox';
 import { MessageToolbar } from './MessageToolbar';
@@ -170,7 +170,22 @@ export function Message({ message, showAvatar, isCompact, onOpenThread }: Messag
                 data-testid="message-file"
                 className="rounded-lg border border-slack-border overflow-hidden"
               >
-                {file.mimetype.startsWith('image/') ? (
+                {file.mimetype.startsWith('audio/') ? (
+                  <div className="flex items-center gap-3 px-3 py-2.5 min-w-[280px]">
+                    <Mic className="h-5 w-5 text-slack-link flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <audio
+                        controls
+                        preload="metadata"
+                        className="h-8 w-full max-w-[240px]"
+                        src={getAuthFileUrl(file.url)}
+                      />
+                      <span className="block text-[11px] text-slack-disabled mt-0.5">
+                        {file.originalName} &middot; {formatFileSize(file.size)}
+                      </span>
+                    </div>
+                  </div>
+                ) : file.mimetype.startsWith('image/') ? (
                   <div>
                     <button
                       data-testid="image-thumbnail"
@@ -300,6 +315,7 @@ export function Message({ message, showAvatar, isCompact, onOpenThread }: Messag
           onMarkUnread={() => {
             setShowMoreMenu(false);
             incrementUnread(message.channelId);
+            markChannelUnread(message.channelId, message.id).catch(() => {});
           }}
           onPin={() => {
             setShowMoreMenu(false);

@@ -6,6 +6,7 @@ import {
   AtSign,
   Smile,
   Mic,
+  Square,
   SendHorizontal,
   X,
   ChevronDown,
@@ -22,6 +23,7 @@ import { ScheduleMenu } from './ScheduleMenu';
 import { FormatToolbar } from './FormatToolbar';
 import { FilePreview } from './FilePreview';
 import { MentionDropdown } from './MentionDropdown';
+import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 
 interface MessageInputProps {
   placeholder: string;
@@ -61,6 +63,14 @@ export function MessageInput({ placeholder, onSend, sendError, clearSendError, c
   const [isScheduling, setIsScheduling] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const scheduleMenuRef = useRef<HTMLDivElement>(null);
+
+  const { isRecording, duration: recordingDuration, startRecording, stopRecording, cancelRecording } = useVoiceRecorder({
+    onRecorded: (file) => setPendingFiles((prev) => [...prev, file]),
+    onError: (msg) => {
+      setUploadError(msg);
+      setTimeout(() => setUploadError(null), 4000);
+    },
+  });
 
   const handleSend = useCallback(async () => {
     const quill = quillRef.current;
@@ -433,7 +443,7 @@ export function MessageInput({ placeholder, onSend, sendError, clearSendError, c
           ref={fileInputRef}
           type="file"
           className="hidden"
-          accept="image/*,.pdf,.txt,.json,.zip"
+          accept="image/*,audio/*,.pdf,.txt,.json,.zip"
           onChange={handleFileSelect}
         />
 
@@ -465,14 +475,39 @@ export function MessageInput({ placeholder, onSend, sendError, clearSendError, c
             >
               <AtSign className="h-[18px] w-[18px]" />
             </Button>
-            <Button
-              data-testid={`${prefix}mic-button`}
-              variant="toolbar"
-              size="icon-sm"
-              title="Record voice clip"
-            >
-              <Mic className="h-[18px] w-[18px]" />
-            </Button>
+            {isRecording ? (
+              <div className="flex items-center gap-1.5 ml-1">
+                <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-[12px] text-red-600 font-medium tabular-nums">
+                  {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
+                </span>
+                <Button
+                  data-testid={`${prefix}mic-stop-button`}
+                  variant="toolbar"
+                  size="icon-sm"
+                  onClick={stopRecording}
+                  title="Stop recording"
+                >
+                  <Square className="h-3.5 w-3.5 fill-red-500 text-red-500" />
+                </Button>
+                <button
+                  onClick={cancelRecording}
+                  className="text-[11px] text-slack-secondary hover:text-slack-primary"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <Button
+                data-testid={`${prefix}mic-button`}
+                variant="toolbar"
+                size="icon-sm"
+                onClick={startRecording}
+                title="Record voice clip"
+              >
+                <Mic className="h-[18px] w-[18px]" />
+              </Button>
+            )}
           </div>
 
           {/* Send button group with schedule dropdown */}

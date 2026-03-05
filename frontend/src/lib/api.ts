@@ -116,6 +116,13 @@ export function markChannelRead(channelId: number, messageId: number) {
   });
 }
 
+export function markChannelUnread(channelId: number, messageId: number) {
+  return request<{ success: boolean }>(`/channels/${channelId}/unread`, {
+    method: 'POST',
+    body: JSON.stringify({ messageId }),
+  });
+}
+
 // ---- Messages ----
 
 export interface ApiReaction {
