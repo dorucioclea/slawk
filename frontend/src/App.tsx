@@ -132,8 +132,11 @@ function AppShell() {
     };
 
     const handleNewDM = (dm: import('@/lib/api').ApiDirectMessage) => {
-      const { addOrUpdateDM } = useChannelStore.getState();
+      const { addOrUpdateDM, activeDMId, incrementDMUnread } = useChannelStore.getState();
       addOrUpdateDM(dm.fromUserId, dm.fromUser.name, dm.fromUser.avatar ?? undefined);
+      if (activeDMId !== dm.fromUserId) {
+        incrementDMUnread(dm.fromUserId);
+      }
     };
 
     const handlePresenceUpdate = (data: { userId: number; status: string }) => {
