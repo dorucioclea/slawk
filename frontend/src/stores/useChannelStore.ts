@@ -137,10 +137,12 @@ export const useChannelStore = create<ChannelState>((set, get) => ({
     try {
       await api.leaveChannel(channelId);
       set((state) => {
-        const remaining = state.channels.filter((ch) => ch.id !== channelId);
-        const nextChannel = remaining.find((ch) => ch.isMember) ?? null;
+        const updated = state.channels.map((ch) =>
+          ch.id === channelId ? { ...ch, isMember: false, memberCount: Math.max(0, ch.memberCount - 1) } : ch
+        );
+        const nextChannel = updated.find((ch) => ch.isMember) ?? null;
         return {
-          channels: remaining,
+          channels: updated,
           activeChannelId: state.activeChannelId === channelId ? (nextChannel?.id ?? null) : state.activeChannelId,
         };
       });
