@@ -27,6 +27,34 @@ echo "  Bucket:   ${GCS_BUCKET_NAME}"
 echo "  Seed:     ${RUN_SEED}"
 echo ""
 
+# ── Ensure GCS bucket exists and has correct permissions ─────────────
+echo "Ensuring GCS bucket gs://${GCS_BUCKET_NAME} exists..."
+if ! gcloud storage buckets describe "gs://${GCS_BUCKET_NAME}" --project "${GCP_PROJECT_ID}" &>/dev/null; then
+  echo "  Creating bucket gs://${GCS_BUCKET_NAME}..."
+  gcloud storage buckets create "gs://${GCS_BUCKET_NAME}" \
+    --project "${GCP_PROJECT_ID}" \
+    --location "${REGION}" \
+    --uniform-bucket-level-access
+else
+  echo "  Bucket already exists."
+fi
+
+# Grant the Cloud Run default service account access to the bucket
+SA_EMAIL="${GCP_PROJECT_ID}@appspot.gserviceaccount.com"
+# Try compute default SA if App Engine SA doesn't exist
+if ! gcloud iam service-accounts describe "${SA_EMAIL}" --project "${GCP_PROJECT_ID}" &>/dev/null; then
+  PROJECT_NUMBER=$(gcloud projects describe "${GCP_PROJECT_ID}" --format='value(projectNumber)')
+  SA_EMAIL="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+fi
+echo "  Granting storage access to ${SA_EMAIL}..."
+gcloud storage buckets add-iam-policy-binding "gs://${GCS_BUCKET_NAME}" \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/storage.objectAdmin" \
+  --project "${GCP_PROJECT_ID}" 2>/dev/null || true
+echo "  GCS bucket ready."
+echo ""
+
+# ── Deploy to Cloud Run ──────────────────────────────────────────────
 gcloud run deploy "${SERVICE_NAME}" \
   --source . \
   --project "${GCP_PROJECT_ID}" \

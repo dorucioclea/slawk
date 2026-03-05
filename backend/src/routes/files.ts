@@ -154,9 +154,18 @@ router.post('/', authMiddleware, upload.single('file'), async (req: AuthRequest,
 
     // Upload to GCS if configured, otherwise use local storage
     if (bucket) {
-      const gcsResult = await uploadToGCS(file.path, file.originalname, file.mimetype);
-      url = gcsResult.signedUrl;
-      gcsPath = gcsResult.gcsPath;
+      try {
+        const gcsResult = await uploadToGCS(file.path, file.originalname, file.mimetype);
+        url = gcsResult.signedUrl;
+        gcsPath = gcsResult.gcsPath;
+      } catch (gcsError) {
+        console.error('GCS upload failed:', gcsError);
+        // Clean up local temp file
+        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        const detail = gcsError instanceof Error ? gcsError.message : String(gcsError);
+        res.status(502).json({ error: `File storage unavailable: ${detail}` });
+        return;
+      }
     } else {
       // URL will be updated after creation to use authenticated download endpoint
       url = '';
