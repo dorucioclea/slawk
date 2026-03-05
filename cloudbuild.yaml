@@ -9,7 +9,7 @@ steps:
     args:
       - 'build'
       - '--cache-from=${_IMAGE}:latest'
-      - '-t=${_IMAGE}:${SHORT_SHA}'
+      - '-t=${_IMAGE}:${BUILD_ID}'
       - '-t=${_IMAGE}:latest'
       - '.'
 
@@ -24,7 +24,7 @@ steps:
       - 'run'
       - 'deploy'
       - '${_SERVICE}'
-      - '--image=${_IMAGE}:${SHORT_SHA}'
+      - '--image=${_IMAGE}:${BUILD_ID}'
       - '--region=${_REGION}'
       - '--add-cloudsql-instances=${_CLOUD_SQL}'
       - '--set-env-vars=DATABASE_URL=${_DATABASE_URL}'
@@ -43,9 +43,9 @@ steps:
 substitutions:
   _SERVICE: slawk
   _REGION: us-central1
-  _IMAGE: us-central1-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/slawk
-  _CLOUD_SQL: ${PROJECT_ID}:us-central1:slawk-db
-  _GCS_BUCKET: slawk-uploads-${PROJECT_ID}
+  _IMAGE: ''
+  _CLOUD_SQL: ''
+  _GCS_BUCKET: ''
   _RUN_SEED: 'false'
   _DATABASE_URL: ''
   _JWT_SECRET: ''

@@ -66,10 +66,12 @@ git clone --depth 1 --branch main "${REPO_URL}" "${DEPLOY_DIR}"
 echo ""
 
 # ── Build and deploy (with Docker layer caching) ────────────────────
+IMAGE="us-central1-docker.pkg.dev/${GCP_PROJECT_ID}/cloud-run-source-deploy/slawk"
+
 gcloud builds submit "${DEPLOY_DIR}" \
   --config="${DEPLOY_DIR}/cloudbuild.yaml" \
   --project "${GCP_PROJECT_ID}" \
-  --substitutions="_DATABASE_URL=${DATABASE_URL},_JWT_SECRET=${JWT_SECRET},_GCS_BUCKET=${GCS_BUCKET_NAME},_RUN_SEED=${RUN_SEED}"
+  --substitutions="_IMAGE=${IMAGE},_CLOUD_SQL=${CLOUD_SQL_INSTANCE},_DATABASE_URL=${DATABASE_URL},_JWT_SECRET=${JWT_SECRET},_GCS_BUCKET=${GCS_BUCKET_NAME},_RUN_SEED=${RUN_SEED}"
 
 echo ""
 echo "Deploy complete! Service URL:"
