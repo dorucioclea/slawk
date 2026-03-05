@@ -44,7 +44,13 @@ Pick by highest severity first: `priority:critical` > `priority:high` > `priorit
 - All tests must pass. If not, fix what broke
 - If you are stuck in a loop, add the `blocked` label to the issue, comment with the work you've done and where you got stuck, and leave the issue open. Then pick the next issue.
 
-### 5. Visual Verification
+### 5. Code Review
+
+Use the **code-reviewer** agent (via the Agent tool) to review the code you just wrote. Address any **Critical** or **Important** findings before committing. **Suggestion**-level findings are optional — use your judgment.
+
+If the reviewer catches real issues, fix them and re-run tests before proceeding.
+
+### 6. Visual Verification
 
 Use Browser MCP to verify the fix manually at localhost:5173. If the fix doesn't work visually, go back to step 4 and iterate.
 
@@ -77,7 +83,7 @@ EOF
 )"
 ```
 
-### 6. Finish
+### 7. Finish
 
 - Commit test + fix together and push to main: `fix: <short description> #<number>`
 - Close the issue:
