@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useChannelStore } from '@/stores/useChannelStore';
 import { useMessageStore } from '@/stores/useMessageStore';
@@ -36,6 +36,7 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
  */
 function RouteSync() {
   const { channelId, userId } = useParams<{ channelId?: string; userId?: string }>();
+  const location = useLocation();
   const setActiveChannel = useChannelStore((s) => s.setActiveChannel);
   const setActiveDM = useChannelStore((s) => s.setActiveDM);
 
@@ -43,7 +44,8 @@ function RouteSync() {
     if (channelId) {
       const id = parseInt(channelId, 10);
       if (!isNaN(id)) {
-        setActiveChannel(id);
+        const scrollToMessageId = (location.state as any)?.scrollToMessageId;
+        setActiveChannel(id, scrollToMessageId);
       }
     } else if (userId) {
       const id = parseInt(userId, 10);
@@ -51,7 +53,7 @@ function RouteSync() {
         setActiveDM(id);
       }
     }
-  }, [channelId, userId, setActiveChannel, setActiveDM]);
+  }, [channelId, userId, setActiveChannel, setActiveDM, location.state]);
 
   return null;
 }

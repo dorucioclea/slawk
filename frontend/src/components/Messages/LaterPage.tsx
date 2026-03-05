@@ -73,7 +73,7 @@ export function LaterPage() {
               <div
                 key={bm.messageId}
                 className="flex items-start gap-3 rounded-lg p-3 hover:bg-slack-hover cursor-pointer group"
-                onClick={() => navigate(`/c/${bm.message.channel.id}`)}
+                onClick={() => navigate(`/c/${bm.message.channel.id}`, { state: { scrollToMessageId: bm.messageId } })}
               >
                 <Avatar
                   src={bm.message.user.avatar ?? undefined}

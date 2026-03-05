@@ -81,4 +81,41 @@ test.describe('Bookmarks', () => {
     // Verify unbookmarked (should not have yellow class)
     await expect(messageRowAfter.getByTestId('bookmark-icon')).not.toHaveClass(/text-yellow-500/, { timeout: 5000 });
   });
+
+  test('clicking saved item scrolls to the bookmarked message (#80)', async ({ page }) => {
+    const email = uniqueEmail();
+    await register(page, 'ScrollTester', email, 'password123');
+
+    await clickChannel(page, 'general');
+    await waitForChannelReady(page);
+
+    const uniqueText = `Scroll target ${Date.now()}`;
+    await sendMessage(page, uniqueText);
+    await waitForMessage(page, uniqueText);
+
+    // Bookmark the message
+    const messageRow = page.locator('.group.relative.flex.px-5').filter({ hasText: uniqueText }).first();
+    await messageRow.hover();
+    const hoverToolbar = page.locator('.absolute.-top-4.right-5').first();
+    await hoverToolbar.getByTestId('bookmark-button').click();
+    await expect(messageRow.getByTestId('bookmark-icon')).toHaveClass(/text-yellow-500/, { timeout: 5000 });
+
+    // Navigate to a different channel
+    await clickChannel(page, 'random');
+    await waitForChannelReady(page);
+
+    // Click the Saved icon in the sidebar
+    await page.getByTestId('nav-item-later').click();
+    await page.waitForTimeout(1000);
+
+    // Click on the saved item
+    const savedItem = page.getByText(uniqueText);
+    await expect(savedItem).toBeVisible({ timeout: 5000 });
+    await savedItem.click();
+    await page.waitForTimeout(1500);
+
+    // Verify we navigated back to general and the message is visible
+    await expect(page).toHaveURL(/\/c\//, { timeout: 5000 });
+    await expect(page.getByText(uniqueText)).toBeVisible({ timeout: 5000 });
+  });
 });
