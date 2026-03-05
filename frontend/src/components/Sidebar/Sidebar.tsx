@@ -353,6 +353,10 @@ export function Sidebar() {
         onCreateChannel={handleCreateChannel}
         browseChannels={browseChannels}
         onJoinChannel={handleJoinChannel}
+        onNavigateToChannel={(channelId) => {
+          setShowAddChannelDialog(false);
+          navigate(`/c/${channelId}`);
+        }}
         onBrowse={handleBrowseChannels}
       />
 

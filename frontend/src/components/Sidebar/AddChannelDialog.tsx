@@ -9,6 +9,7 @@ interface AddChannelDialogProps {
   onCreateChannel: (name: string) => Promise<void>;
   browseChannels: Channel[];
   onJoinChannel: (channelId: number) => Promise<void>;
+  onNavigateToChannel: (channelId: number) => void;
   onBrowse: () => void;
 }
 
@@ -18,6 +19,7 @@ export function AddChannelDialog({
   onCreateChannel,
   browseChannels,
   onJoinChannel,
+  onNavigateToChannel,
   onBrowse,
 }: AddChannelDialogProps) {
   const [addChannelMode, setAddChannelMode] = useState<'create' | 'browse'>('create');
@@ -129,7 +131,14 @@ export function AddChannelDialog({
                     <div
                       key={ch.id}
                       data-channel-name={ch.name}
-                      className="flex items-center justify-between rounded px-3 py-2 hover:bg-slack-hover"
+                      className="flex items-center justify-between rounded px-3 py-2 hover:bg-slack-hover cursor-pointer"
+                      onClick={() => {
+                        if (ch.isMember) {
+                          onNavigateToChannel(ch.id);
+                        } else {
+                          onJoinChannel(ch.id).then(() => onNavigateToChannel(ch.id));
+                        }
+                      }}
                     >
                       <div className="flex items-center gap-2">
                         <span className="text-slack-disabled">#</span>
@@ -139,7 +148,7 @@ export function AddChannelDialog({
                       {ch.isMember ? (
                         <span data-testid="joined-badge" className="text-[12px] text-slack-hint font-medium px-2 py-1">Joined</span>
                       ) : (
-                        <Button size="sm" onClick={() => onJoinChannel(ch.id)}>
+                        <Button size="sm" onClick={(e) => { e.stopPropagation(); onJoinChannel(ch.id); }}>
                           Join
                         </Button>
                       )}
