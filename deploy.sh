@@ -58,9 +58,16 @@ gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
 echo "  GCS bucket ready."
 echo ""
 
+# ── Clone main branch from GitHub ────────────────────────────────────
+REPO_URL="https://github.com/ncvgl/slawk.git"
+DEPLOY_DIR=$(mktemp -d)
+echo "Cloning ${REPO_URL} (main) into ${DEPLOY_DIR}..."
+git clone --depth 1 --branch main "${REPO_URL}" "${DEPLOY_DIR}"
+echo ""
+
 # ── Deploy to Cloud Run ──────────────────────────────────────────────
 gcloud run deploy "${SERVICE_NAME}" \
-  --source . \
+  --source "${DEPLOY_DIR}" \
   --project "${GCP_PROJECT_ID}" \
   --region "${REGION}" \
   --add-cloudsql-instances "${CLOUD_SQL_INSTANCE}" \
@@ -83,3 +90,6 @@ gcloud run services describe "${SERVICE_NAME}" \
   --project "${GCP_PROJECT_ID}" \
   --region "${REGION}" \
   --format 'value(status.url)'
+
+# Clean up
+rm -rf "${DEPLOY_DIR}"
