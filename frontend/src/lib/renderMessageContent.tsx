@@ -28,7 +28,7 @@ function renderInline(content: string, keyOffset: number = 0): React.ReactNode[]
       nodes.push(<em key={key++} className="leading-[22px]">{m[7]}</em>);
     } else if (m[8]) {
       // `code`
-      nodes.push(<code key={key++} className="rounded-[3px] bg-slack-code-bg px-1 py-0.5 font-mono text-[0.875em]">{m[9]}</code>);
+      nodes.push(<code key={key++} className="rounded-[3px] border border-slack-border bg-slack-hover px-1 py-0.5 font-mono text-[0.875em] text-slack-code-inline">{m[9]}</code>);
     } else if (m[10]) {
       // ~~strikethrough~~
       nodes.push(<s key={key++}>{m[11]}</s>);
@@ -68,7 +68,7 @@ export function renderMessageContent(content: string): React.ReactNode {
     // Render the code block
     const codeContent = m[1].replace(/^\n/, '').replace(/\n$/, '');
     nodes.push(
-      <pre key={key++} className="my-1 rounded bg-slack-code-bg px-3 py-2 font-mono text-[0.875em] overflow-x-auto whitespace-pre-wrap">
+      <pre key={key++} className="my-1 rounded border border-slack-border bg-slack-hover px-3 py-2 font-mono text-[0.875em] overflow-x-auto whitespace-pre-wrap">
         <code>{codeContent}</code>
       </pre>
     );
