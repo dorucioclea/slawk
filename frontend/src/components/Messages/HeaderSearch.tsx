@@ -144,7 +144,7 @@ export function HeaderSearch({ testIdPrefix = '' }: HeaderSearchProps) {
                           </>
                         )}
                       </div>
-                      <p className="mt-0.5 text-sm text-slack-primary line-clamp-2">{renderMessageContent(result.content)}</p>
+                      <div className="mt-0.5 text-sm text-slack-primary line-clamp-2">{renderMessageContent(result.content)}</div>
                     </div>
                   </div>
                 </button>

@@ -83,7 +83,7 @@ export function PinsPanel({ channelId, onClose }: PinsPanelProps) {
                   {format(new Date(pin.createdAt), 'MMM d, h:mm a')}
                 </span>
               </div>
-              <p className="mt-1 text-[14px] text-slack-primary leading-[20px]">{renderMessageContent(pin.content)}</p>
+              <div className="mt-1 text-[14px] text-slack-primary leading-[20px]">{renderMessageContent(pin.content)}</div>
             </div>
           ))
         )}
