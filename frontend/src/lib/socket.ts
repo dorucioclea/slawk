@@ -6,11 +6,11 @@ export function getSocket(): Socket | null {
   return socket;
 }
 
-export function connectSocket(): Socket {
+export function connectSocket(): Socket | null {
   if (socket?.connected) return socket;
 
   const token = localStorage.getItem('token');
-  if (!token) throw new Error('No token for socket connection');
+  if (!token) return null;
 
   socket = io({
     auth: { token },

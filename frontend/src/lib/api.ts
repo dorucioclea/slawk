@@ -88,6 +88,13 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: 'Request failed' }));
+    // Auto-logout on 401 (expired/invalid token).
+    // Guard: only redirect once — concurrent 401s after token removal are no-ops.
+    // Uses hard reload (window.location) so all in-memory Zustand state is wiped.
+    if (res.status === 401 && localStorage.getItem('token')) {
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
     throw new ApiError(body.error || 'Request failed', res.status);
   }
 

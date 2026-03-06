@@ -113,6 +113,10 @@ function AppShell() {
   // Connect socket and set up event listeners
   useEffect(() => {
     const socket = connectSocket();
+    if (!socket) {
+      console.warn('[AppShell] No socket connection — token may be missing');
+      return;
+    }
 
     const handleNewMessage = (msg: import('@/lib/api').ApiMessage) => {
       const { onMessageNew } = useMessageStore.getState();
