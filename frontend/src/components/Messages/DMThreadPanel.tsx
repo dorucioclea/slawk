@@ -450,9 +450,9 @@ export function DMThreadPanel({ dmId, onClose, onReplyCountChange }: DMThreadPan
                         {format(parentMessage.createdAt, 'h:mm a')}
                       </span>
                     </div>
-                    <p className="text-[15px] text-slack-primary leading-[22px] whitespace-pre-wrap break-words">
+                    <div className="text-[15px] text-slack-primary leading-[22px] whitespace-pre-wrap break-words">
                       {renderMessageContent(parentMessage.content)}
-                    </p>
+                    </div>
                   </div>
                 </div>
                 {replies.length > 0 && (
@@ -483,9 +483,9 @@ export function DMThreadPanel({ dmId, onClose, onReplyCountChange }: DMThreadPan
                         {format(reply.createdAt, 'h:mm a')}
                       </span>
                     </div>
-                    <p className="text-[14px] text-slack-primary leading-[20px] whitespace-pre-wrap break-words">
+                    <div className="text-[14px] text-slack-primary leading-[20px] whitespace-pre-wrap break-words">
                       {renderMessageContent(reply.content)}
-                    </p>
+                    </div>
                   </div>
                 </div>
               </div>
