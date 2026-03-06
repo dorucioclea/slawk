@@ -207,8 +207,36 @@ export function MessageInput({ placeholder, onSend, sendError, clearSendError, c
       placeholder,
     });
 
-    quill.on('text-change', () => {
+    quill.on('text-change', (_delta, _oldDelta, source) => {
       setCanSend(quill.getText().trim().length > 0);
+
+      // Markdown inline code shortcut: detect `code` pattern typed by user
+      if (source === 'user') {
+        const sel = quill.getSelection();
+        if (sel) {
+          const cursorPos = sel.index;
+          const fullText = quill.getText(0, cursorPos);
+          // Check if user just typed a closing backtick
+          if (fullText.endsWith('`') && fullText.length >= 3) {
+            // Find the matching opening backtick (skip the closing one)
+            const beforeClose = fullText.slice(0, -1);
+            const openIdx = beforeClose.lastIndexOf('`');
+            if (openIdx >= 0) {
+              const codeContent = beforeClose.slice(openIdx + 1);
+              // Only convert if content is non-empty, not too long, and doesn't contain newlines
+              if (codeContent.length > 0 && codeContent.length <= 100 && !codeContent.includes('\n')) {
+                // Delete the raw backtick-delimited text, insert formatted code
+                quill.deleteText(openIdx, codeContent.length + 2); // +2 for both backticks
+                quill.insertText(openIdx, codeContent, { code: true });
+                quill.insertText(openIdx + codeContent.length, ' ', { code: false });
+                quill.setSelection(openIdx + codeContent.length + 1);
+                return;
+              }
+            }
+          }
+        }
+      }
+
       // Detect @mention trigger
       const selection = quill.getSelection();
       if (!selection) return;
