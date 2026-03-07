@@ -79,6 +79,24 @@ app.use((req, res, next) => {
 // Note: /uploads is NOT served via express.static to prevent unauthenticated access.
 // Files are served through the authenticated GET /files/:id/download endpoint.
 
+// In production, intercept browser navigations (Accept: text/html) for SPA routes
+// that collide with API routes (e.g. /files, /admin) and serve index.html
+if (process.env.NODE_ENV === 'production') {
+  const spaRoutes = ['/files', '/admin'];
+  const frontendDist = path.join(process.cwd(), 'public');
+  app.use(spaRoutes, (req, res, next) => {
+    if (req.method === 'GET' && req.accepts('html') && !req.path.includes('.')) {
+      // Only for top-level navigation (no sub-paths like /files/:id/download)
+      if (req.originalUrl === req.baseUrl || req.originalUrl === req.baseUrl + '/') {
+        res.setHeader('Cache-Control', 'no-cache');
+        res.sendFile(path.join(frontendDist, 'index.html'));
+        return;
+      }
+    }
+    next();
+  });
+}
+
 // Routes
 app.use('/auth', authLimiter, authRoutes);
 app.use('/channels', apiLimiter, channelRoutes);
