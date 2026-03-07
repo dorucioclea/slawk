@@ -128,7 +128,7 @@ export function Sidebar() {
   const sortByName = (a: Channel, b: Channel) => a.name.localeCompare(b.name);
   const starredChannels = channels.filter((ch) => ch.isStarred && ch.isMember).sort(sortByName);
   const publicChannels = channels.filter((ch) => !ch.isPrivate && ch.isMember).sort(sortByName);
-  const privateChannels = channels.filter((ch) => ch.isPrivate).sort(sortByName);
+  const privateChannels = channels.filter((ch) => ch.isPrivate && ch.isMember).sort(sortByName);
 
   return (
     <div className="flex h-full">
