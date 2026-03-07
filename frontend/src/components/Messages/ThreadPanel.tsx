@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import Quill from 'quill';
 import 'quill/dist/quill.snow.css';
 import { Avatar } from '@/components/ui/avatar';
-import { getThread, replyToMessage, uploadFile, getUsers, getAuthFileUrl, type ApiMessage, type ApiFile, type AuthUser } from '@/lib/api';
+import { getThread, replyToMessage, getDMThread, replyToDM, uploadFile, getUsers, getAuthFileUrl, type ApiFile, type AuthUser } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { serializeDelta } from '@/lib/serializeDelta';
 import { renderMessageContent } from '@/lib/renderMessageContent';
@@ -20,18 +20,21 @@ interface ThreadPanelProps {
   messageId: number;
   onClose: () => void;
   onReplyCountChange?: (messageId: number, count: number) => void;
+  variant?: 'channel' | 'dm';
 }
 
 interface ThreadMessage {
   id: number;
   content: string;
-  userId: number;
-  user: { id: number; name: string; email: string; avatar?: string | null };
+  user: { id: number; name: string; avatar?: string | null };
   createdAt: Date;
   files?: { id: number; filename: string; originalName: string; mimetype: string; size: number; url: string }[];
 }
 
-export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPanelProps) {
+export function ThreadPanel({ messageId, onClose, onReplyCountChange, variant = 'channel' }: ThreadPanelProps) {
+  const isDM = variant === 'dm';
+  const testPrefix = isDM ? 'dm-thread' : 'thread';
+
   const [parentMessage, setParentMessage] = useState<ThreadMessage | null>(null);
   const [replies, setReplies] = useState<ThreadMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,25 +69,28 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
     },
   });
 
-  const transformMessage = (msg: ApiMessage): ThreadMessage => ({
-    id: msg.id,
-    content: msg.content,
-    userId: msg.userId,
-    user: msg.user,
-    createdAt: new Date(msg.createdAt),
-    files: msg.files,
-  });
+  // Normalize API responses into a common ThreadMessage shape
+  function normalizeMessage(msg: any): ThreadMessage {
+    return {
+      id: msg.id,
+      content: msg.content,
+      user: msg.user ?? msg.fromUser,
+      createdAt: new Date(msg.createdAt),
+      files: msg.files,
+    };
+  }
 
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
     setLoadError(null);
 
-    getThread(messageId)
+    const fetchFn = isDM ? getDMThread(messageId) : getThread(messageId);
+    fetchFn
       .then((data) => {
         if (cancelled) return;
-        setParentMessage(transformMessage(data.parent));
-        setReplies(data.replies.map(transformMessage));
+        setParentMessage(normalizeMessage(data.parent));
+        setReplies(data.replies.map(normalizeMessage));
       })
       .catch(() => {
         if (!cancelled) setLoadError('Failed to load thread. Please try again.');
@@ -96,7 +102,7 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
     return () => {
       cancelled = true;
     };
-  }, [messageId]);
+  }, [messageId, isDM]);
 
   useEffect(() => {
     repliesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -112,9 +118,14 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
     setIsSending(true);
     setReplyError(null);
     try {
-      const fileIds = pendingFiles.map((f) => f.id);
-      const apiReply = await replyToMessage(messageId, content, fileIds.length > 0 ? fileIds : undefined);
-      const reply = transformMessage(apiReply);
+      let apiReply;
+      if (isDM) {
+        apiReply = await replyToDM(messageId, content);
+      } else {
+        const fileIds = pendingFiles.map((f) => f.id);
+        apiReply = await replyToMessage(messageId, content, fileIds.length > 0 ? fileIds : undefined);
+      }
+      const reply = normalizeMessage(apiReply);
       let newCount = 0;
       setReplies((prev) => {
         const next = [...prev, reply];
@@ -131,7 +142,7 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
     } finally {
       setIsSending(false);
     }
-  }, [messageId, onReplyCountChange, pendingFiles]);
+  }, [messageId, onReplyCountChange, pendingFiles, isDM]);
 
   const handleSendRef = useRef(handleSendReply);
   handleSendRef.current = handleSendReply;
@@ -410,9 +421,37 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
 
   const hasContent = canSend || pendingFiles.length > 0;
 
+  const renderFiles = (files?: ThreadMessage['files']) => {
+    if (!files || files.length === 0) return null;
+    return (
+      <div className="mt-1 flex flex-wrap gap-2">
+        {files.map((file) => (
+          <div key={file.id} className="rounded-lg border border-slack-border overflow-hidden">
+            {file.mimetype.startsWith('image/') ? (
+              <img
+                src={getAuthFileUrl(file.url)}
+                alt={file.originalName}
+                className="max-w-[200px] max-h-[150px] object-cover"
+              />
+            ) : (
+              <a
+                href={getAuthFileUrl(file.url)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block px-3 py-2 text-[13px] text-slack-link hover:underline"
+              >
+                {file.originalName}
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div
-      data-testid="thread-panel"
+      data-testid={`${testPrefix}-panel`}
       className="flex w-[380px] flex-col border-l border-slack-border bg-white"
     >
       {/* Header */}
@@ -428,7 +467,7 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
         {isLoading ? (
           <div className="text-center text-sm text-slack-hint py-4">Loading thread...</div>
         ) : loadError ? (
-          <div data-testid="thread-load-error" className="text-center text-sm text-slack-error py-4">{loadError}</div>
+          <div data-testid={`${testPrefix}-load-error`} className="text-center text-sm text-slack-error py-4">{loadError}</div>
         ) : (
           <>
             {/* Parent message */}
@@ -454,30 +493,7 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
                     <div className="text-[15px] text-slack-primary leading-[22px] whitespace-pre-wrap break-words">
                       {renderMessageContent(parentMessage.content)}
                     </div>
-                    {parentMessage.files && parentMessage.files.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-2">
-                        {parentMessage.files.map((file) => (
-                          <div key={file.id} className="rounded-lg border border-slack-border overflow-hidden">
-                            {file.mimetype.startsWith('image/') ? (
-                              <img
-                                src={getAuthFileUrl(file.url)}
-                                alt={file.originalName}
-                                className="max-w-[200px] max-h-[150px] object-cover"
-                              />
-                            ) : (
-                              <a
-                                href={getAuthFileUrl(file.url)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="block px-3 py-2 text-[13px] text-slack-link hover:underline"
-                              >
-                                {file.originalName}
-                              </a>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    {renderFiles(parentMessage.files)}
                   </div>
                 </div>
                 {replies.length > 0 && (
@@ -511,30 +527,7 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
                     <div className="text-[14px] text-slack-primary leading-[20px] whitespace-pre-wrap break-words">
                       {renderMessageContent(reply.content)}
                     </div>
-                    {reply.files && reply.files.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-2">
-                        {reply.files.map((file) => (
-                          <div key={file.id} className="rounded-lg border border-slack-border overflow-hidden">
-                            {file.mimetype.startsWith('image/') ? (
-                              <img
-                                src={getAuthFileUrl(file.url)}
-                                alt={file.originalName}
-                                className="max-w-[200px] max-h-[150px] object-cover"
-                              />
-                            ) : (
-                              <a
-                                href={getAuthFileUrl(file.url)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="block px-3 py-2 text-[13px] text-slack-link hover:underline"
-                              >
-                                {file.originalName}
-                              </a>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    {renderFiles(reply.files)}
                   </div>
                 </div>
               </div>
@@ -547,12 +540,12 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
       {/* Reply input */}
       <div className="relative border-t border-slack-border px-4 py-3">
         {replyError && (
-          <p data-testid="thread-reply-error" className="mb-2 text-xs text-slack-error">{replyError}</p>
+          <p data-testid={`${testPrefix}-reply-error`} className="mb-2 text-xs text-slack-error">{replyError}</p>
         )}
         {uploadError && (
           <p className="mb-2 text-xs text-slack-error">{uploadError}</p>
         )}
-        <div data-testid="thread-reply-input" className="slawk-editor rounded-[8px] border border-slack-border-light">
+        <div data-testid={`${testPrefix}-reply-input`} className="slawk-editor rounded-[8px] border border-slack-border-light">
           {/* Formatting Toolbar */}
           <FormatToolbar onApplyFormat={applyFormat} />
 
@@ -600,7 +593,7 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
           <div className="flex items-center justify-between px-[6px] py-1">
             <div className="flex items-center">
               <Button
-                data-testid="thread-attach-file-button"
+                data-testid={`${testPrefix}-attach-file-button`}
                 variant="toolbar"
                 size="icon-sm"
                 onClick={() => fileInputRef.current?.click()}
@@ -617,7 +610,7 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
                 <Smile className="h-[18px] w-[18px]" />
               </Button>
               <Button
-                data-testid="thread-mention-button"
+                data-testid={`${testPrefix}-mention-button`}
                 variant="toolbar"
                 size="icon-sm"
                 onClick={handleMentionButtonClick}
@@ -632,7 +625,7 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
                     {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
                   </span>
                   <Button
-                    data-testid="thread-mic-stop-button"
+                    data-testid={`${testPrefix}-mic-stop-button`}
                     variant="toolbar"
                     size="icon-sm"
                     onClick={stopRecording}
@@ -649,7 +642,7 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
                 </div>
               ) : (
                 <Button
-                  data-testid="thread-mic-button"
+                  data-testid={`${testPrefix}-mic-button`}
                   variant="toolbar"
                   size="icon-sm"
                   onClick={startRecording}
@@ -661,7 +654,7 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange }: ThreadPa
             </div>
 
             <button
-              data-testid="thread-send-button"
+              data-testid={`${testPrefix}-send-button`}
               onClick={() => handleSendRef.current()}
               disabled={!hasContent || isSending}
               className={cn(

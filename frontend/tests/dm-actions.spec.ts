@@ -118,6 +118,11 @@ test.describe('DM Message Actions', () => {
     await expect(deleteBtn).toBeVisible({ timeout: 3000 });
     await deleteBtn.click();
 
+    // Confirmation dialog should appear
+    const dialog = page1.getByTestId('delete-confirm-dialog');
+    await expect(dialog).toBeVisible({ timeout: 3000 });
+    await page1.getByTestId('delete-confirm-btn').click();
+
     // The message should be removed from the conversation
     await expect(page1.getByTestId('dm-conversation').getByText('Message to delete')).not.toBeVisible({ timeout: 5000 });
 
