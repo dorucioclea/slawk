@@ -4,7 +4,7 @@ import prisma from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requireDmOwnership, requireDmAccess } from '../middleware/authorize.js';
 import { AuthRequest } from '../types.js';
-import { isUserOnline } from '../websocket/index.js';
+import { isUserOnline, getIO } from '../websocket/index.js';
 import { USER_SELECT_BASIC, DM_INCLUDE_USERS } from '../db/selects.js';
 import { parsePagination, paginateResults } from '../utils/pagination.js';
 
@@ -288,6 +288,13 @@ router.patch('/messages/:id', authMiddleware, requireDmOwnership, async (req: Au
       },
     });
 
+    // Broadcast to the other user so the edit appears in real-time
+    // (the sender's UI is already updated from the REST response)
+    const io = getIO();
+    if (io && updated.fromUserId !== updated.toUserId) {
+      io.to(`user:${updated.toUserId}`).emit('dm:updated', updated);
+    }
+
     res.json(updated);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -302,12 +309,23 @@ router.patch('/messages/:id', authMiddleware, requireDmOwnership, async (req: Au
 // DELETE /dms/messages/:id - Delete a direct message (soft delete)
 router.delete('/messages/:id', authMiddleware, requireDmOwnership, async (req: AuthRequest, res: Response) => {
   try {
-    const dmId = req.dm.id;
+    const dm = req.dm;
 
     await prisma.directMessage.update({
-      where: { id: dmId },
+      where: { id: dm.id },
       data: { deletedAt: new Date() },
     });
+
+    // Broadcast to the other user so the deletion appears in real-time
+    // (the sender's UI is already updated from the REST response)
+    const io = getIO();
+    if (io && dm.fromUserId !== dm.toUserId) {
+      io.to(`user:${dm.toUserId}`).emit('dm:deleted', {
+        dmId: dm.id,
+        fromUserId: dm.fromUserId,
+        toUserId: dm.toUserId,
+      });
+    }
 
     res.json({ message: 'Message deleted successfully' });
   } catch (error) {

@@ -435,6 +435,7 @@ export interface ApiDirectMessage {
   threadId?: number | null;
   createdAt: string;
   updatedAt: string;
+  editedAt: string | null;
   deletedAt: string | null;
   fromUser: { id: number; name: string; email: string; avatar?: string | null };
   toUser: { id: number; name: string; email: string; avatar?: string | null };

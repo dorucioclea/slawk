@@ -155,6 +155,18 @@ function AppShell() {
       useDMStore.getState().addIncomingMessage(dm, currentUser.id);
     };
 
+    const handleDMUpdated = (dm: import('@/lib/api').ApiDirectMessage) => {
+      const currentUser = useAuthStore.getState().user;
+      if (!currentUser) return;
+      useDMStore.getState().onDMUpdated(dm, currentUser.id);
+    };
+
+    const handleDMDeleted = (data: { dmId: number; fromUserId: number; toUserId: number }) => {
+      const currentUser = useAuthStore.getState().user;
+      if (!currentUser) return;
+      useDMStore.getState().onDMDeleted(data, currentUser.id);
+    };
+
     const handlePresenceUpdate = (data: { userId: number; status: string }) => {
       const { updateDMStatus } = useChannelStore.getState();
       updateDMStatus(data.userId, data.status as import('@/lib/types').DirectMessage['userStatus']);
@@ -185,6 +197,8 @@ function AppShell() {
     socket.on('message:updated', handleUpdatedMessage);
     socket.on('message:deleted', handleDeletedMessage);
     socket.on('dm:new', handleNewDM);
+    socket.on('dm:updated', handleDMUpdated);
+    socket.on('dm:deleted', handleDMDeleted);
     socket.on('presence:update', handlePresenceUpdate);
     socket.on('channel:member-added', handleMemberAdded);
     socket.on('channel:member-left', handleMemberLeft);
@@ -197,6 +211,8 @@ function AppShell() {
       socket.off('message:updated', handleUpdatedMessage);
       socket.off('message:deleted', handleDeletedMessage);
       socket.off('dm:new', handleNewDM);
+      socket.off('dm:updated', handleDMUpdated);
+      socket.off('dm:deleted', handleDMDeleted);
       socket.off('presence:update', handlePresenceUpdate);
       socket.off('channel:member-added', handleMemberAdded);
       socket.off('channel:member-left', handleMemberLeft);

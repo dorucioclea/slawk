@@ -38,6 +38,8 @@ interface DMState {
   editMessage: (messageId: number, content: string, userId: number) => Promise<void>;
   deleteMessage: (messageId: number, userId: number) => Promise<void>;
   addIncomingMessage: (dm: ApiDirectMessage, currentUserId: number) => void;
+  onDMUpdated: (dm: ApiDirectMessage, currentUserId: number) => void;
+  onDMDeleted: (data: { dmId: number; fromUserId: number; toUserId: number }, currentUserId: number) => void;
   updateReplyCount: (messageId: number, userId: number, count: number) => void;
   clearConversation: (userId: number) => void;
   clearSendError: () => void;
@@ -146,6 +148,33 @@ export const useDMStore = create<DMState>((set, get) => ({
       messages: {
         ...state.messages,
         [otherUserId]: [...state.messages[otherUserId], message],
+      },
+    });
+  },
+
+  onDMUpdated: (dm: ApiDirectMessage, currentUserId: number) => {
+    const otherUserId = dm.fromUserId === currentUserId ? dm.toUserId : dm.fromUserId;
+    const state = get();
+    if (!state.messages[otherUserId]) return;
+    const updated = transformDM(dm);
+    set({
+      messages: {
+        ...state.messages,
+        [otherUserId]: state.messages[otherUserId].map((m) =>
+          m.id === dm.id ? updated : m,
+        ),
+      },
+    });
+  },
+
+  onDMDeleted: (data: { dmId: number; fromUserId: number; toUserId: number }, currentUserId: number) => {
+    const otherUserId = data.fromUserId === currentUserId ? data.toUserId : data.fromUserId;
+    const state = get();
+    if (!state.messages[otherUserId]) return;
+    set({
+      messages: {
+        ...state.messages,
+        [otherUserId]: state.messages[otherUserId].filter((m) => m.id !== data.dmId),
       },
     });
   },
