@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, FileText, FileImage, FileArchive, Download } from 'lucide-react';
 import { format } from 'date-fns';
-import { getChannelFiles, getUserFiles, getAuthFileUrl, type ApiFileWithUser } from '@/lib/api';
+import { getChannelFiles, getUserFiles, getAuthFileUrl, refreshDownloadToken, type ApiFileWithUser } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { ImageLightbox } from './ImageLightbox';
 
@@ -34,8 +34,8 @@ export function FilesPanel({ channelId, onClose, title }: FilesPanelProps) {
   const fetchFiles = useCallback(() => {
     setIsLoading(true);
     const fetchFn = channelId ? getChannelFiles(channelId) : getUserFiles();
-    fetchFn
-      .then((data) => {
+    Promise.all([fetchFn, refreshDownloadToken()])
+      .then(([data]) => {
         setFiles(data);
         setLoadError(null);
       })

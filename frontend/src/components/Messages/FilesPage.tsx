@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FileText, FileImage, FileArchive, Download } from 'lucide-react';
 import { format } from 'date-fns';
-import { getUserFiles, getAuthFileUrl, type ApiFileWithUser } from '@/lib/api';
+import { getUserFiles, getAuthFileUrl, refreshDownloadToken, type ApiFileWithUser } from '@/lib/api';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -23,8 +23,8 @@ export function FilesPage() {
 
   const fetchFiles = useCallback(() => {
     setIsLoading(true);
-    getUserFiles()
-      .then((data) => {
+    Promise.all([getUserFiles(), refreshDownloadToken()])
+      .then(([data]) => {
         setFiles(data);
         setLoadError(null);
       })

@@ -5,7 +5,7 @@
 let _downloadToken: string | null = null;
 let _downloadTokenExpires = 0;
 
-async function refreshDownloadToken(): Promise<string | null> {
+export async function refreshDownloadToken(): Promise<string | null> {
   const now = Date.now();
   if (_downloadToken && now < _downloadTokenExpires) return _downloadToken;
 
