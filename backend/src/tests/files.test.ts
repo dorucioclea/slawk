@@ -31,7 +31,10 @@ describe('File Uploads', () => {
     if (fs.existsSync(uploadsDir)) {
       const files = fs.readdirSync(uploadsDir);
       files.forEach((file) => {
-        fs.unlinkSync(path.join(uploadsDir, file));
+        const filePath = path.join(uploadsDir, file);
+        if (fs.statSync(filePath).isFile()) {
+          fs.unlinkSync(filePath);
+        }
       });
     }
   });

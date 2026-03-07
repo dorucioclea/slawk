@@ -93,37 +93,38 @@ describe('Security - Channel Access Control', () => {
   });
 
   describe('Bug #3: Read messages after leaving channel', () => {
-    let publicChannelId: number;
+    let privateChannelId: number;
 
     beforeEach(async () => {
-      // Create a public channel
+      // Create a private channel (public channels are readable by anyone by design)
       const channelRes = await request(app)
         .post('/channels')
         .set('Authorization', `Bearer ${user1Token}`)
-        .send({ name: 'public-channel', isPrivate: false });
+        .send({ name: 'private-channel', isPrivate: true });
 
-      publicChannelId = channelRes.body.id;
+      privateChannelId = channelRes.body.id;
 
-      // User2 joins the channel
+      // User1 (creator) adds User2 to the private channel
       await request(app)
-        .post(`/channels/${publicChannelId}/join`)
-        .set('Authorization', `Bearer ${user2Token}`);
+        .post(`/channels/${privateChannelId}/members`)
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({ userId: user2Id });
 
       // User1 sends a message
       await request(app)
-        .post(`/channels/${publicChannelId}/messages`)
+        .post(`/channels/${privateChannelId}/messages`)
         .set('Authorization', `Bearer ${user1Token}`)
         .send({ content: 'Secret message' });
 
       // User2 leaves the channel
       await request(app)
-        .post(`/channels/${publicChannelId}/leave`)
+        .post(`/channels/${privateChannelId}/leave`)
         .set('Authorization', `Bearer ${user2Token}`);
     });
 
     it('should NOT allow reading messages after leaving channel', async () => {
       const res = await request(app)
-        .get(`/channels/${publicChannelId}/messages`)
+        .get(`/channels/${privateChannelId}/messages`)
         .set('Authorization', `Bearer ${user2Token}`);
 
       expect(res.status).toBe(403);
@@ -132,7 +133,7 @@ describe('Security - Channel Access Control', () => {
 
     it('should allow reading messages while still a member', async () => {
       const res = await request(app)
-        .get(`/channels/${publicChannelId}/messages`)
+        .get(`/channels/${privateChannelId}/messages`)
         .set('Authorization', `Bearer ${user1Token}`);
 
       expect(res.status).toBe(200);
