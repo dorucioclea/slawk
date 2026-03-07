@@ -8,6 +8,8 @@ import sharp from 'sharp';
 import prisma from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { AuthRequest } from '../types.js';
+import { parseIntParam } from '../utils/params.js';
+import { logError } from '../utils/logger.js';
 import { isUserOnline } from '../websocket/index.js';
 
 // Avatar upload setup
@@ -40,13 +42,17 @@ const avatarUpload = multer({
 const router = Router();
 
 const updateProfileSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  avatar: z.string().refine(
+  name: z.string().min(1).max(100)
+    .refine(val => !val.includes('\u0000'), { message: 'Name cannot contain null bytes' })
+    .optional(),
+  avatar: z.string().max(500).refine(
     (url) => url.startsWith('https://') || url.startsWith('/users/me/avatar/'),
     { message: 'Avatar URL must use HTTPS or be a local avatar path' }
   ).optional().nullable(),
   status: z.enum(['online', 'away', 'busy', 'offline']).optional(),
-  bio: z.string().max(500).optional().nullable(),
+  bio: z.string().max(500)
+    .refine(val => !val.includes('\u0000'), { message: 'Bio cannot contain null bytes' })
+    .optional().nullable(),
 });
 
 // GET /users/me - Get current user profile
@@ -81,7 +87,7 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
 
     res.json(user);
   } catch (error) {
-    console.error('Get profile error:', error);
+    logError('Get profile error', error);
     res.status(500).json({ error: 'Failed to get profile' });
   }
 });
@@ -113,7 +119,7 @@ router.patch('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       res.status(400).json({ error: error.issues });
       return;
     }
-    console.error('Update profile error:', error);
+    logError('Update profile error', error);
     res.status(500).json({ error: 'Failed to update profile' });
   }
 });
@@ -175,7 +181,7 @@ router.post('/me/avatar', authMiddleware, avatarUpload.single('avatar'), async (
   } catch (error) {
     // Clean up temp file on error
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    console.error('Avatar upload error:', error);
+    logError('Avatar upload error', error);
     res.status(500).json({ error: 'Failed to upload avatar' });
   }
 });
@@ -189,10 +195,11 @@ router.get('/me/avatar/:filename', async (req: AuthRequest, res: Response) => {
     return;
   }
   res.setHeader('Content-Type', 'image/png');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'public, max-age=86400');
   const stream = fs.createReadStream(filePath);
   stream.on('error', (err) => {
-    console.error('Avatar stream error:', err);
+    logError('Avatar stream error', err);
     if (!res.headersSent) res.status(500).json({ error: 'Failed to read avatar' });
   });
   stream.pipe(res);
@@ -201,9 +208,8 @@ router.get('/me/avatar/:filename', async (req: AuthRequest, res: Response) => {
 // GET /users/:id - Get user by ID
 router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const userId = parseInt(req.params.id);
-
-    if (isNaN(userId)) {
+    const userId = parseIntParam(req.params.id);
+    if (!userId) {
       res.status(400).json({ error: 'Invalid user ID' });
       return;
     }
@@ -228,7 +234,7 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
 
     res.json(user);
   } catch (error) {
-    console.error('Get user error:', error);
+    logError('Get user error', error);
     res.status(500).json({ error: 'Failed to get user' });
   }
 });
@@ -236,7 +242,8 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
 // GET /users - List users (for searching/mentioning)
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const search = req.query.search as string;
+    const rawSearch = typeof req.query.search === 'string' ? req.query.search.slice(0, 100) : undefined;
+    const search = rawSearch || undefined;
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
 
     const where = search
@@ -266,7 +273,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
     res.json(augmented);
   } catch (error) {
-    console.error('List users error:', error);
+    logError('List users error', error);
     res.status(500).json({ error: 'Failed to list users' });
   }
 });
@@ -294,7 +301,7 @@ router.put('/me/status', authMiddleware, async (req: AuthRequest, res: Response)
       res.status(400).json({ error: error.issues });
       return;
     }
-    console.error('Update status error:', error);
+    logError('Update status error', error);
     res.status(500).json({ error: 'Failed to update status' });
   }
 });
@@ -302,9 +309,8 @@ router.put('/me/status', authMiddleware, async (req: AuthRequest, res: Response)
 // GET /users/:id/presence - Get user presence status
 router.get('/:id/presence', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const userId = parseInt(req.params.id);
-
-    if (isNaN(userId)) {
+    const userId = parseIntParam(req.params.id);
+    if (!userId) {
       res.status(400).json({ error: 'Invalid user ID' });
       return;
     }
@@ -333,7 +339,7 @@ router.get('/:id/presence', authMiddleware, async (req: AuthRequest, res: Respon
       isOnline,
     });
   } catch (error) {
-    console.error('Get presence error:', error);
+    logError('Get presence error', error);
     res.status(500).json({ error: 'Failed to get presence' });
   }
 });

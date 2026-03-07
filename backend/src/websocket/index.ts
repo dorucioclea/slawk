@@ -14,6 +14,7 @@ import {
   wsUserIdSchema,
 } from '../middleware/authorize.js';
 import { USER_SELECT_BASIC, MESSAGE_INCLUDE_WITH_FILES, DM_INCLUDE_USERS } from '../db/selects.js';
+import { logError } from '../utils/logger.js';
 
 interface AuthenticatedSocket extends Socket {
   user?: JwtPayload;
@@ -22,7 +23,7 @@ interface AuthenticatedSocket extends Socket {
 // Track online users: Map<userId, Set<socketId>>
 const onlineUsers = new Map<number, Set<string>>();
 
-// Per-socket rate limiting
+// Per-user rate limiting (keyed on userId, not socketId, to prevent bypass via reconnect)
 const RATE_LIMITS: Record<string, { max: number; windowMs: number }> = {
   'message:send': { max: 30, windowMs: 60_000 },
   'dm:send': { max: 30, windowMs: 60_000 },
@@ -32,15 +33,17 @@ const RATE_LIMITS: Record<string, { max: number; windowMs: number }> = {
   'typing:stop': { max: 60, windowMs: 60_000 },
   'dm:typing:start': { max: 60, windowMs: 60_000 },
   'dm:typing:stop': { max: 60, windowMs: 60_000 },
+  'join:channel': { max: 20, windowMs: 60_000 },
+  'dm:join': { max: 20, windowMs: 60_000 },
 };
 
 const rateLimitState = new Map<string, { count: number; resetAt: number }>();
 
-function checkRateLimit(socketId: string, event: string): boolean {
+function checkRateLimit(userId: number, event: string): boolean {
   const config = RATE_LIMITS[event];
   if (!config) return true;
 
-  const key = `${socketId}:${event}`;
+  const key = `${userId}:${event}`;
   const now = Date.now();
   const entry = rateLimitState.get(key);
 
@@ -54,11 +57,13 @@ function checkRateLimit(socketId: string, event: string): boolean {
   return true;
 }
 
-function clearRateLimitState(socketId: string) {
-  for (const key of rateLimitState.keys()) {
-    if (key.startsWith(`${socketId}:`)) rateLimitState.delete(key);
+// Periodic cleanup of expired rate limit entries (every 5 minutes)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateLimitState) {
+    if (now >= entry.resetAt) rateLimitState.delete(key);
   }
-}
+}, 5 * 60 * 1000).unref();
 
 // Get users who share channels or DMs with the given user (single query)
 async function getSharedUsers(userId: number): Promise<number[]> {
@@ -81,7 +86,7 @@ async function getSharedUsers(userId: number): Promise<number[]> {
 export function initializeWebSocket(httpServer: HttpServer) {
   const io = new Server(httpServer, {
     cors: {
-      origin: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? false : '*'),
+      origin: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? false : 'http://localhost:5173'),
       methods: ['GET', 'POST'],
     },
     maxHttpBufferSize: 16384,
@@ -112,6 +117,44 @@ export function initializeWebSocket(httpServer: HttpServer) {
       next(new Error('Invalid token'));
     }
   });
+
+  // Periodic token revalidation: disconnect sockets whose JWT has expired or been revoked
+  const TOKEN_REVALIDATION_INTERVAL = 5 * 60 * 1000; // 5 minutes
+  setInterval(async () => {
+    // Batch-fetch tokenVersions for all connected users
+    const connectedUserIds = [...new Set(
+      [...io.sockets.sockets.values()]
+        .map(s => (s as AuthenticatedSocket).user?.userId)
+        .filter((id): id is number => id !== undefined)
+    )];
+    const users = connectedUserIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: connectedUserIds } },
+          select: { id: true, tokenVersion: true },
+        })
+      : [];
+    const versionMap = new Map(users.map(u => [u.id, u.tokenVersion]));
+
+    for (const [, socket] of io.sockets.sockets) {
+      const authSocket = socket as AuthenticatedSocket;
+      const token = authSocket.handshake?.auth?.token;
+      if (!token) continue;
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as JwtPayload & { tokenVersion?: number };
+        // Check tokenVersion if present in JWT
+        if (decoded.tokenVersion !== undefined && decoded.userId) {
+          const currentVersion = versionMap.get(decoded.userId);
+          if (currentVersion !== undefined && currentVersion !== decoded.tokenVersion) {
+            authSocket.emit('error', { message: 'Session revoked' });
+            authSocket.disconnect(true);
+          }
+        }
+      } catch {
+        authSocket.emit('error', { message: 'Session expired' });
+        authSocket.disconnect(true);
+      }
+    }
+  }, TOKEN_REVALIDATION_INTERVAL).unref();
 
   io.on('connection', async (socket: AuthenticatedSocket) => {
     console.log(`User ${socket.user?.userId} connected`);
@@ -158,7 +201,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
             });
           }
         } catch (err) {
-          console.error('Failed to update user presence:', err);
+          logError('Failed to update user presence', err);
         }
       }
     }
@@ -166,6 +209,10 @@ export function initializeWebSocket(httpServer: HttpServer) {
     // Join channel room
     socket.on('join:channel', async (rawChannelId: unknown, ack?: (ok: boolean) => void) => {
       if (!socket.user) return;
+      if (!checkRateLimit(socket.user.userId, 'join:channel')) {
+        if (typeof ack === 'function') ack(false);
+        return;
+      }
 
       const parsed = wsChannelIdSchema.safeParse(rawChannelId);
       if (!parsed.success) {
@@ -198,7 +245,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
     // Send message
     socket.on('message:send', async (rawData: unknown) => {
       if (!socket.user) return;
-      if (!checkRateLimit(socket.id, 'message:send')) {
+      if (!checkRateLimit(socket.user.userId, 'message:send')) {
         socket.emit('error', { message: 'Rate limit exceeded' });
         return;
       }
@@ -263,7 +310,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
         // Broadcast to all OTHER users in the channel room
         socket.to(`channel:${data.channelId}`).emit('message:new', finalMessage);
       } catch (error) {
-        console.error('WebSocket message error:', error);
+        logError('WebSocket message error', error);
         socket.emit('error', { message: 'Failed to send message' });
       }
     });
@@ -271,7 +318,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
     // Edit message
     socket.on('message:edit', async (rawData: unknown) => {
       if (!socket.user) return;
-      if (!checkRateLimit(socket.id, 'message:edit')) {
+      if (!checkRateLimit(socket.user.userId, 'message:edit')) {
         socket.emit('error', { message: 'Rate limit exceeded' });
         return;
       }
@@ -312,7 +359,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
 
         io.to(`channel:${message.channelId}`).emit('message:updated', updatedMessage);
       } catch (error) {
-        console.error('WebSocket edit message error:', error);
+        logError('WebSocket edit message error', error);
         socket.emit('error', { message: 'Failed to edit message' });
       }
     });
@@ -320,7 +367,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
     // Delete message
     socket.on('message:delete', async (rawData: unknown) => {
       if (!socket.user) return;
-      if (!checkRateLimit(socket.id, 'message:delete')) {
+      if (!checkRateLimit(socket.user.userId, 'message:delete')) {
         socket.emit('error', { message: 'Rate limit exceeded' });
         return;
       }
@@ -360,7 +407,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
 
         io.to(`channel:${message.channelId}`).emit('message:deleted', { messageId: data.messageId });
       } catch (error) {
-        console.error('WebSocket delete message error:', error);
+        logError('WebSocket delete message error', error);
         socket.emit('error', { message: 'Failed to delete message' });
       }
     });
@@ -368,7 +415,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
     // Typing indicator (uses cached membership to avoid DB query per keystroke)
     socket.on('typing:start', async (rawChannelId: unknown) => {
       if (!socket.user) return;
-      if (!checkRateLimit(socket.id, 'typing:start')) return;
+      if (!checkRateLimit(socket.user.userId, 'typing:start')) return;
 
       const parsed = wsChannelIdSchema.safeParse(rawChannelId);
       if (!parsed.success) return;
@@ -384,7 +431,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
 
     socket.on('typing:stop', async (rawChannelId: unknown) => {
       if (!socket.user) return;
-      if (!checkRateLimit(socket.id, 'typing:stop')) return;
+      if (!checkRateLimit(socket.user.userId, 'typing:stop')) return;
 
       const parsed = wsChannelIdSchema.safeParse(rawChannelId);
       if (!parsed.success) return;
@@ -406,6 +453,10 @@ export function initializeWebSocket(httpServer: HttpServer) {
     // Join DM conversation room
     socket.on('dm:join', async (rawOtherUserId: unknown) => {
       if (!socket.user) return;
+      if (!checkRateLimit(socket.user.userId, 'dm:join')) {
+        socket.emit('error', { message: 'Rate limit exceeded' });
+        return;
+      }
 
       const parsed = wsUserIdSchema.safeParse(rawOtherUserId);
       if (!parsed.success) {
@@ -455,7 +506,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
     // Send DM via WebSocket
     socket.on('dm:send', async (rawData: unknown) => {
       if (!socket.user) return;
-      if (!checkRateLimit(socket.id, 'dm:send')) {
+      if (!checkRateLimit(socket.user.userId, 'dm:send')) {
         socket.emit('error', { message: 'Rate limit exceeded' });
         return;
       }
@@ -499,7 +550,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
           io.to(`user:${data.toUserId}`).emit('dm:new', dm);
         }
       } catch (error) {
-        console.error('WebSocket DM error:', error);
+        logError('WebSocket DM error', error);
         socket.emit('error', { message: 'Failed to send DM' });
       }
     });
@@ -507,7 +558,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
     // DM typing indicator — verify DM conversation exists before emitting
     socket.on('dm:typing:start', async (rawToUserId: unknown) => {
       if (!socket.user) return;
-      if (!checkRateLimit(socket.id, 'dm:typing:start')) return;
+      if (!checkRateLimit(socket.user.userId, 'dm:typing:start')) return;
 
       const parsed = wsUserIdSchema.safeParse(rawToUserId);
       if (!parsed.success) return;
@@ -533,7 +584,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
 
     socket.on('dm:typing:stop', async (rawToUserId: unknown) => {
       if (!socket.user) return;
-      if (!checkRateLimit(socket.id, 'dm:typing:stop')) return;
+      if (!checkRateLimit(socket.user.userId, 'dm:typing:stop')) return;
 
       const parsed = wsUserIdSchema.safeParse(rawToUserId);
       if (!parsed.success) return;
@@ -559,9 +610,6 @@ export function initializeWebSocket(httpServer: HttpServer) {
 
     socket.on('disconnect', async () => {
       console.log(`User ${socket.user?.userId} disconnected`);
-
-      // Clean up rate limit state for this socket
-      clearRateLimitState(socket.id);
 
       if (socket.user) {
         const userId = socket.user.userId;
@@ -594,7 +642,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
                 });
               }
             } catch (err) {
-              console.error('Failed to update user presence on disconnect:', err);
+              logError('Failed to update user presence on disconnect', err);
             }
           }
         }
@@ -617,6 +665,3 @@ export function isUserOnline(userId: number): boolean {
   return onlineUsers.has(userId) && onlineUsers.get(userId)!.size > 0;
 }
 
-export function getOnlineUserIds(): number[] {
-  return Array.from(onlineUsers.keys());
-}

@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { z } from 'zod';
 import prisma from '../db.js';
 import { AuthRequest } from '../types.js';
+import { parseIntParam } from '../utils/params.js';
 
 // ── Express Middleware ──────────────────────────────────────────────
 
@@ -14,8 +15,8 @@ export async function requireChannelMembership(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const channelId = parseInt(req.params.id);
-  if (isNaN(channelId)) {
+  const channelId = parseIntParam(req.params.id);
+  if (!channelId) {
     res.status(400).json({ error: 'Invalid channel ID' });
     return;
   }
@@ -45,8 +46,8 @@ export async function requireMessageAccess(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const messageId = parseInt(req.params.id);
-  if (isNaN(messageId)) {
+  const messageId = parseIntParam(req.params.id);
+  if (!messageId) {
     res.status(400).json({ error: 'Invalid message ID' });
     return;
   }
@@ -86,8 +87,8 @@ export async function requireFileAccess(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const fileId = parseInt(req.params.id);
-  if (isNaN(fileId)) {
+  const fileId = parseIntParam(req.params.id);
+  if (!fileId) {
     res.status(400).json({ error: 'Invalid file ID' });
     return;
   }
@@ -148,8 +149,8 @@ export async function requireDmAccess(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const dmId = parseInt(req.params.id);
-  if (isNaN(dmId)) {
+  const dmId = parseIntParam(req.params.id);
+  if (!dmId) {
     res.status(400).json({ error: 'Invalid message ID' });
     return;
   }
@@ -183,8 +184,8 @@ export async function requireDmOwnership(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const dmId = parseInt(req.params.id);
-  if (isNaN(dmId)) {
+  const dmId = parseIntParam(req.params.id);
+  if (!dmId) {
     res.status(400).json({ error: 'Invalid message ID' });
     return;
   }

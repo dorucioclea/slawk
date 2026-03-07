@@ -8,6 +8,12 @@ const PORT = process.env.PORT || 3000;
 
 const server = createServer(app);
 
+// HTTP server timeouts
+server.headersTimeout = 10_000;   // 10 seconds to receive headers
+server.requestTimeout = 30_000;   // 30 seconds for full request
+server.timeout = 120_000;         // 2 minutes overall socket timeout
+server.keepAliveTimeout = 65_000; // slightly above common LB idle timeout (60s)
+
 // Initialize WebSocket
 const io = initializeWebSocket(server);
 

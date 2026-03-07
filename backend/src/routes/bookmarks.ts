@@ -4,13 +4,15 @@ import { authMiddleware } from '../middleware/auth.js';
 import { requireMessageAccess } from '../middleware/authorize.js';
 import { AuthRequest } from '../types.js';
 import { USER_SELECT_BASIC, FILE_SELECT } from '../db/selects.js';
+import { parseIntParam } from '../utils/params.js';
+import { logError } from '../utils/logger.js';
 
 const router = Router();
 
 // POST /messages/:id/bookmark - Bookmark a message
 router.post('/:id/bookmark', authMiddleware, requireMessageAccess, async (req: AuthRequest, res: Response) => {
   try {
-    const messageId = parseInt(req.params.id);
+    const messageId = parseIntParam(req.params.id)!;
     const userId = req.user!.userId;
 
     const existing = await prisma.bookmark.findUnique({
@@ -28,7 +30,7 @@ router.post('/:id/bookmark', authMiddleware, requireMessageAccess, async (req: A
 
     res.status(201).json(bookmark);
   } catch (error) {
-    console.error('Add bookmark error:', error);
+    logError('Add bookmark error', error);
     res.status(500).json({ error: 'Failed to add bookmark' });
   }
 });
@@ -36,7 +38,7 @@ router.post('/:id/bookmark', authMiddleware, requireMessageAccess, async (req: A
 // DELETE /messages/:id/bookmark - Remove bookmark
 router.delete('/:id/bookmark', authMiddleware, requireMessageAccess, async (req: AuthRequest, res: Response) => {
   try {
-    const messageId = parseInt(req.params.id);
+    const messageId = parseIntParam(req.params.id)!;
     const userId = req.user!.userId;
 
     const bookmark = await prisma.bookmark.findUnique({
@@ -54,7 +56,7 @@ router.delete('/:id/bookmark', authMiddleware, requireMessageAccess, async (req:
 
     res.json({ message: 'Bookmark removed' });
   } catch (error) {
-    console.error('Remove bookmark error:', error);
+    logError('Remove bookmark error', error);
     res.status(500).json({ error: 'Failed to remove bookmark' });
   }
 });
@@ -98,7 +100,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Get bookmarks error:', error);
+    logError('Get bookmarks error', error);
     res.status(500).json({ error: 'Failed to get bookmarks' });
   }
 });

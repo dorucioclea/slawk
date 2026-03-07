@@ -30,7 +30,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-      'img-src': ["'self'", 'data:', 'blob:', 'https://randomuser.me', 'https://storage.googleapis.com'],
+      'img-src': ["'self'", 'blob:', ...(process.env.NODE_ENV !== 'production' ? ['https://randomuser.me'] : []), ...(process.env.GCS_BUCKET_NAME ? [`https://storage.googleapis.com/${process.env.GCS_BUCKET_NAME}`] : [])],
       'connect-src': ["'self'", 'wss:', 'ws:'],
       'media-src': ["'self'", 'blob:', 'https://storage.googleapis.com'],
     },
@@ -38,7 +38,7 @@ app.use(helmet({
   crossOriginEmbedderPolicy: 'credentialless' as any,
   hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
 }));
-const corsOrigin = process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? false : '*');
+const corsOrigin = process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? false : 'http://localhost:5173');
 app.use(cors({ origin: corsOrigin as string | boolean }));
 app.use(express.json({ limit: '100kb' }));
 

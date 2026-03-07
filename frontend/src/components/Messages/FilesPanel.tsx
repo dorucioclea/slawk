@@ -91,7 +91,7 @@ export function FilesPanel({ channelId, onClose, title }: FilesPanelProps) {
                   </p>
                 </div>
                 <a
-                  href={getAuthFileUrl(file.url, { download: true })}
+                  href={getAuthFileUrl(`/files/${file.id}/download`, { download: true })}
                   download={file.originalName.replace(/[/\\:\0]/g, '_')} rel="noopener"
                   className="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded hover:bg-slack-hover"
                   title="Download"

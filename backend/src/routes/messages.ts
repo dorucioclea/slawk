@@ -6,6 +6,7 @@ import { requireChannelMembership } from '../middleware/authorize.js';
 import { AuthRequest } from '../types.js';
 import { USER_SELECT_BASIC, FILE_SELECT, MESSAGE_INCLUDE_FULL, MESSAGE_INCLUDE_WITH_FILES } from '../db/selects.js';
 import { parsePagination, paginateResults } from '../utils/pagination.js';
+import { logError } from '../utils/logger.js';
 
 const router = Router();
 
@@ -78,7 +79,7 @@ router.post('/:id/messages', authMiddleware, requireChannelMembership, async (re
       res.status(400).json({ error: error.message });
       return;
     }
-    console.error('Send message error:', error);
+    logError('Send message error', error);
     res.status(500).json({ error: 'Failed to send message' });
   }
 });
@@ -132,7 +133,7 @@ router.get('/:id/messages', authMiddleware, requireChannelMembership, async (req
       hasMore,
     });
   } catch (error) {
-    console.error('Get messages error:', error);
+    logError('Get messages error', error);
     res.status(500).json({ error: 'Failed to get messages' });
   }
 });

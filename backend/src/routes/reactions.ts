@@ -5,20 +5,24 @@ import { authMiddleware } from '../middleware/auth.js';
 import { requireMessageAccess } from '../middleware/authorize.js';
 import { AuthRequest } from '../types.js';
 import { getIO } from '../websocket/index.js';
+import { parseIntParam } from '../utils/params.js';
+import { logError } from '../utils/logger.js';
 
 const router = Router();
 
-const emojiRegex = /^[\p{Emoji}\p{Emoji_Component}\w+_:-]+$/u;
+// Matches either a Unicode emoji sequence or a :shortcode: format
+const emojiShortcodeRegex = /^:[a-z0-9_+-]+:$/;
+const unicodeEmojiRegex = /^\p{Extended_Pictographic}(\u200d\p{Extended_Pictographic}|\uFE0F)*$/u;
 
 const reactionSchema = z.object({
   emoji: z.string().min(1).max(32)
-    .refine(val => emojiRegex.test(val), { message: 'Invalid emoji format' }),
+    .refine(val => unicodeEmojiRegex.test(val) || emojiShortcodeRegex.test(val), { message: 'Invalid emoji format' }),
 });
 
 // POST /messages/:id/reactions - Add reaction to message
 router.post('/:id/reactions', authMiddleware, requireMessageAccess, async (req: AuthRequest, res: Response) => {
   try {
-    const messageId = parseInt(req.params.id);
+    const messageId = parseIntParam(req.params.id)!;
     const userId = req.user!.userId;
     const { emoji } = reactionSchema.parse(req.body);
 
@@ -63,7 +67,7 @@ router.post('/:id/reactions', authMiddleware, requireMessageAccess, async (req: 
       res.status(400).json({ error: error.issues });
       return;
     }
-    console.error('Add reaction error:', error);
+    logError('Add reaction error', error);
     res.status(500).json({ error: 'Failed to add reaction' });
   }
 });
@@ -71,14 +75,21 @@ router.post('/:id/reactions', authMiddleware, requireMessageAccess, async (req: 
 // DELETE /messages/:id/reactions/:emoji - Remove reaction from message
 router.delete('/:id/reactions/:emoji', authMiddleware, requireMessageAccess, async (req: AuthRequest, res: Response) => {
   try {
-    const messageId = parseInt(req.params.id);
-    const emoji = decodeURIComponent(req.params.emoji);
+    const messageId = parseIntParam(req.params.id)!;
+    const rawEmoji = decodeURIComponent(req.params.emoji as string);
     const userId = req.user!.userId;
 
     if (isNaN(messageId)) {
       res.status(400).json({ error: 'Invalid message ID' });
       return;
     }
+
+    // Validate emoji param same as creation route
+    if (!rawEmoji || rawEmoji.length > 32 || !(unicodeEmojiRegex.test(rawEmoji) || emojiShortcodeRegex.test(rawEmoji))) {
+      res.status(400).json({ error: 'Invalid emoji format' });
+      return;
+    }
+    const emoji = rawEmoji;
 
     const reaction = await prisma.reaction.findUnique({
       where: {
@@ -108,7 +119,7 @@ router.delete('/:id/reactions/:emoji', authMiddleware, requireMessageAccess, asy
 
     res.json({ message: 'Reaction removed' });
   } catch (error) {
-    console.error('Remove reaction error:', error);
+    logError('Remove reaction error', error);
     res.status(500).json({ error: 'Failed to remove reaction' });
   }
 });
@@ -116,7 +127,7 @@ router.delete('/:id/reactions/:emoji', authMiddleware, requireMessageAccess, asy
 // GET /messages/:id/reactions - Get all reactions for a message
 router.get('/:id/reactions', authMiddleware, requireMessageAccess, async (req: AuthRequest, res: Response) => {
   try {
-    const messageId = parseInt(req.params.id);
+    const messageId = parseIntParam(req.params.id)!;
 
     const reactions = await prisma.reaction.findMany({
       where: { messageId },
@@ -144,7 +155,7 @@ router.get('/:id/reactions', authMiddleware, requireMessageAccess, async (req: A
 
     res.json(Object.values(grouped));
   } catch (error) {
-    console.error('Get reactions error:', error);
+    logError('Get reactions error', error);
     res.status(500).json({ error: 'Failed to get reactions' });
   }
 });

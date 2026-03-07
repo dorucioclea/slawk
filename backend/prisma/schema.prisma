@@ -9,16 +9,17 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  name      String
-  avatar    String?
-  status    String?  @default("online")
-  bio       String?
-  lastSeen  DateTime @default(now())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
+  id           Int      @id @default(autoincrement())
+  email        String   @unique @db.VarChar(255)
+  password     String   @db.VarChar(255)
+  name         String   @db.VarChar(100)
+  avatar       String?  @db.VarChar(500)
+  status       String?  @default("online") @db.VarChar(20)
+  bio          String?  @db.VarChar(500)
+  tokenVersion Int      @default(0)
+  lastSeen     DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
 
   messages           Message[]
   channels           ChannelMember[]
@@ -33,8 +34,9 @@ model User {
 
 model Channel {
   id        Int      @id @default(autoincrement())
-  name      String   @unique
+  name      String   @unique @db.VarChar(80)
   isPrivate Boolean  @default(false)
+  createdBy Int?
   createdAt DateTime @default(now())
 
   messages           Message[]
@@ -83,7 +85,7 @@ model Message {
 
 model Reaction {
   id        Int      @id @default(autoincrement())
-  emoji     String
+  emoji     String   @db.VarChar(50)
   userId    Int
   messageId Int
   createdAt DateTime @default(now())
@@ -97,9 +99,9 @@ model Reaction {
 
 model File {
   id           Int      @id @default(autoincrement())
-  filename     String
-  originalName String
-  mimetype     String
+  filename     String   @db.VarChar(255)
+  originalName String   @db.VarChar(255)
+  mimetype     String   @db.VarChar(127)
   size         Int
   url          String
   gcsPath      String?

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import prisma from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { AuthRequest } from '../types.js';
+import { logError } from '../utils/logger.js';
 
 const router = Router();
 
@@ -129,7 +130,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('Search error:', error);
+    logError('Search error', error);
     res.status(500).json({ error: 'Failed to search messages' });
   }
 });

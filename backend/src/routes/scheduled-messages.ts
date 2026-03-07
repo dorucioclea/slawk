@@ -4,6 +4,8 @@ import prisma from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { checkChannelMembership } from '../middleware/authorize.js';
 import { AuthRequest } from '../types.js';
+import { parseIntParam } from '../utils/params.js';
+import { logError } from '../utils/logger.js';
 
 const router = Router();
 
@@ -26,6 +28,14 @@ router.post('/schedule', authMiddleware, async (req: AuthRequest, res: Response)
     const scheduledDate = new Date(scheduledAt);
     if (scheduledDate <= new Date()) {
       res.status(400).json({ error: 'scheduledAt must be in the future' });
+      return;
+    }
+
+    // Enforce maximum scheduling horizon (30 days)
+    const maxFuture = new Date();
+    maxFuture.setDate(maxFuture.getDate() + 30);
+    if (scheduledDate > maxFuture) {
+      res.status(400).json({ error: 'Cannot schedule more than 30 days in advance' });
       return;
     }
 
@@ -63,7 +73,7 @@ router.post('/schedule', authMiddleware, async (req: AuthRequest, res: Response)
       res.status(400).json({ error: error.issues });
       return;
     }
-    console.error('Schedule message error:', error);
+    logError('Schedule message error', error);
     res.status(500).json({ error: 'Failed to schedule message' });
   }
 });
@@ -83,7 +93,7 @@ router.get('/scheduled', authMiddleware, async (req: AuthRequest, res: Response)
 
     res.json(messages);
   } catch (error) {
-    console.error('Get scheduled messages error:', error);
+    logError('Get scheduled messages error', error);
     res.status(500).json({ error: 'Failed to get scheduled messages' });
   }
 });
@@ -92,9 +102,8 @@ router.get('/scheduled', authMiddleware, async (req: AuthRequest, res: Response)
 router.delete('/scheduled/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const id = parseInt(req.params.id);
-
-    if (isNaN(id)) {
+    const id = parseIntParam(req.params.id);
+    if (!id) {
       res.status(400).json({ error: 'Invalid message ID' });
       return;
     }
@@ -122,7 +131,7 @@ router.delete('/scheduled/:id', authMiddleware, async (req: AuthRequest, res: Re
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Cancel scheduled message error:', error);
+    logError('Cancel scheduled message error', error);
     res.status(500).json({ error: 'Failed to cancel scheduled message' });
   }
 });

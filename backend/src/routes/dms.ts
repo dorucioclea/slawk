@@ -7,6 +7,8 @@ import { AuthRequest } from '../types.js';
 import { isUserOnline, getIO } from '../websocket/index.js';
 import { USER_SELECT_BASIC, DM_INCLUDE_USERS } from '../db/selects.js';
 import { parsePagination, paginateResults } from '../utils/pagination.js';
+import { parseIntParam } from '../utils/params.js';
+import { logError } from '../utils/logger.js';
 
 const router = Router();
 
@@ -51,7 +53,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       res.status(400).json({ error: error.issues });
       return;
     }
-    console.error('Send DM error:', error);
+    logError('Send DM error', error);
     res.status(500).json({ error: 'Failed to send DM' });
   }
 });
@@ -125,7 +127,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Get DM conversations error:', error);
+    logError('Get DM conversations error', error);
     res.status(500).json({ error: 'Failed to get DM conversations' });
   }
 });
@@ -134,9 +136,8 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 router.get('/:userId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const currentUserId = req.user!.userId;
-    const otherUserId = parseInt(req.params.userId);
-
-    if (isNaN(otherUserId)) {
+    const otherUserId = parseIntParam(req.params.userId);
+    if (!otherUserId) {
       res.status(400).json({ error: 'Invalid user ID' });
       return;
     }
@@ -198,7 +199,7 @@ router.get('/:userId', authMiddleware, async (req: AuthRequest, res: Response) =
       hasMore,
     });
   } catch (error) {
-    console.error('Get DM conversation error:', error);
+    logError('Get DM conversation error', error);
     res.status(500).json({ error: 'Failed to get DM conversation' });
   }
 });
@@ -243,7 +244,7 @@ router.post('/messages/:id/reply', authMiddleware, requireDmAccess, async (req: 
       res.status(400).json({ error: error.issues });
       return;
     }
-    console.error('DM reply error:', error);
+    logError('DM reply error', error);
     res.status(500).json({ error: 'Failed to send reply' });
   }
 });
@@ -271,7 +272,7 @@ router.get('/messages/:id/thread', authMiddleware, requireDmAccess, async (req: 
 
     res.json({ parent, replies });
   } catch (error) {
-    console.error('Get DM thread error:', error);
+    logError('Get DM thread error', error);
     res.status(500).json({ error: 'Failed to get thread' });
   }
 });
@@ -308,7 +309,7 @@ router.patch('/messages/:id', authMiddleware, requireDmOwnership, async (req: Au
       res.status(400).json({ error: error.issues });
       return;
     }
-    console.error('Edit DM error:', error);
+    logError('Edit DM error', error);
     res.status(500).json({ error: 'Failed to edit message' });
   }
 });
@@ -336,7 +337,7 @@ router.delete('/messages/:id', authMiddleware, requireDmOwnership, async (req: A
 
     res.json({ message: 'Message deleted successfully' });
   } catch (error) {
-    console.error('Delete DM error:', error);
+    logError('Delete DM error', error);
     res.status(500).json({ error: 'Failed to delete message' });
   }
 });
@@ -345,9 +346,8 @@ router.delete('/messages/:id', authMiddleware, requireDmOwnership, async (req: A
 router.post('/:userId/read', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const currentUserId = req.user!.userId;
-    const otherUserId = parseInt(req.params.userId);
-
-    if (isNaN(otherUserId)) {
+    const otherUserId = parseIntParam(req.params.userId);
+    if (!otherUserId) {
       res.status(400).json({ error: 'Invalid user ID' });
       return;
     }
@@ -377,7 +377,7 @@ router.post('/:userId/read', authMiddleware, async (req: AuthRequest, res: Respo
 
     res.json({ markedAsRead: result.count });
   } catch (error) {
-    console.error('Mark DMs as read error:', error);
+    logError('Mark DMs as read error', error);
     res.status(500).json({ error: 'Failed to mark messages as read' });
   }
 });

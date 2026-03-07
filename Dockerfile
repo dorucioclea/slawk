@@ -19,6 +19,7 @@ RUN test -f dist/index.js
 # ── Stage 3: Production image ────────────────────────────────────────
 FROM node:22-alpine AS production
 RUN apk add --no-cache openssl
+RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 WORKDIR /app
 
 # Copy backend build output and dependencies
@@ -33,6 +34,9 @@ COPY --from=frontend-build /app/frontend/dist ./public
 # Copy entrypoint
 COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh
+
+RUN chown -R appuser:appgroup /app
+USER appuser
 
 ENV NODE_ENV=production
 ENV PORT=8080

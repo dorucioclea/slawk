@@ -41,7 +41,7 @@ const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
       : '?';
 
     return (
-      <div className="relative inline-block" ref={ref} {...props}>
+      <div className="relative inline-flex" ref={ref} {...props}>
         <div
           className={cn(
             'relative flex shrink-0 overflow-hidden bg-gray-200',

@@ -211,7 +211,7 @@ export function Message({ message, showAvatar, isCompact, onOpenThread }: Messag
                       </span>
                       <a
                         data-testid="image-download"
-                        href={getAuthFileUrl(file.url, { download: true })}
+                        href={getAuthFileUrl(`/files/${file.id}/download`, { download: true })}
                         download={file.originalName.replace(/[/\\:\0]/g, '_')} rel="noopener"
                         className="ml-auto flex-shrink-0 text-slack-disabled hover:text-slack-primary"
                         onClick={(e) => e.stopPropagation()}
@@ -225,7 +225,7 @@ export function Message({ message, showAvatar, isCompact, onOpenThread }: Messag
                     <FileIcon className="h-8 w-8 text-slack-link flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <a
-                        href={getAuthFileUrl(file.url, { download: true })}
+                        href={getAuthFileUrl(`/files/${file.id}/download`, { download: true })}
                         download={file.originalName.replace(/[/\\:\0]/g, '_')} rel="noopener"
                         className="block text-[13px] font-medium text-slack-link hover:underline truncate"
                       >
@@ -236,7 +236,7 @@ export function Message({ message, showAvatar, isCompact, onOpenThread }: Messag
                       </span>
                     </div>
                     <a
-                      href={getAuthFileUrl(file.url, { download: true })}
+                      href={getAuthFileUrl(`/files/${file.id}/download`, { download: true })}
                       download={file.originalName.replace(/[/\\:\0]/g, '_')} rel="noopener"
                       className="flex-shrink-0 text-slack-disabled hover:text-slack-primary"
                       onClick={(e) => e.stopPropagation()}

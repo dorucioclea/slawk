@@ -4,12 +4,15 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { Storage } from '@google-cloud/storage';
 import prisma from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requireFileAccess } from '../middleware/authorize.js';
 import { AuthRequest } from '../types.js';
+import { parseIntParam } from '../utils/params.js';
+import { logError } from '../utils/logger.js';
 import { JWT_SECRET } from '../config.js';
 
 // GCS setup - only initialize if bucket name is configured
@@ -91,16 +94,18 @@ const INLINE_SAFE_TYPES = new Set([
 async function uploadToGCS(localPath: string, filename: string, mimetype: string): Promise<{ gcsPath: string; signedUrl: string }> {
   if (!bucket) throw new Error('GCS not configured');
 
-  const gcsPath = `uploads/${Date.now()}-${filename}`;
+  // Sanitize filename for GCS path (strip path separators and control chars)
+  const safeName = filename.replace(/[/\\:\x00-\x1F\x7F]/g, '_').slice(0, 255);
+  const gcsPath = `uploads/${Date.now()}-${safeName}`;
   await bucket.upload(localPath, {
     destination: gcsPath,
     metadata: { contentType: mimetype },
   });
 
-  // Generate signed URL valid for 7 days
+  // Generate signed URL valid for 30 minutes
   const [signedUrl] = await bucket.file(gcsPath).getSignedUrl({
     action: 'read',
-    expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    expires: Date.now() + 30 * 60 * 1000,
   });
 
   // Delete local temp file after GCS upload
@@ -210,7 +215,7 @@ router.post('/', authMiddleware, uploadLimiter, upload.single('file'), async (re
         url = gcsResult.signedUrl;
         gcsPath = gcsResult.gcsPath;
       } catch (gcsError) {
-        console.error('GCS upload failed:', gcsError);
+        logError('GCS upload failed', gcsError);
         // Clean up local temp file
         if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
         res.status(502).json({ error: 'File storage unavailable' });
@@ -221,10 +226,15 @@ router.post('/', authMiddleware, uploadLimiter, upload.single('file'), async (re
       url = '';
     }
 
+    // Sanitize and truncate original filename
+    const sanitizedOriginalName = file.originalname
+      .replace(/[\x00-\x1F\x7F]/g, '') // strip control characters
+      .slice(0, 255);
+
     const fileRecord = await prisma.file.create({
       data: {
         filename: file.filename,
-        originalName: file.originalname,
+        originalName: sanitizedOriginalName,
         mimetype: file.mimetype,
         size: file.size,
         url,
@@ -250,7 +260,7 @@ router.post('/', authMiddleware, uploadLimiter, upload.single('file'), async (re
 
     res.status(201).json(fileRecord);
   } catch (error) {
-    console.error('Upload file error:', error);
+    logError('Upload file error', error);
     res.status(500).json({ error: 'Failed to upload file' });
   }
 });
@@ -264,7 +274,7 @@ router.get('/:id', authMiddleware, requireFileAccess, async (req: AuthRequest, r
     if (file.gcsPath && bucket) {
       const [signedUrl] = await bucket.file(file.gcsPath).getSignedUrl({
         action: 'read',
-        expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        expires: Date.now() + 30 * 60 * 1000,
       });
       res.json({ ...file, url: signedUrl });
       return;
@@ -272,15 +282,20 @@ router.get('/:id', authMiddleware, requireFileAccess, async (req: AuthRequest, r
 
     res.json(file);
   } catch (error) {
-    console.error('Get file error:', error);
+    logError('Get file error', error);
     res.status(500).json({ error: 'Failed to get file' });
   }
 });
 
 // POST /files/download-token - Issue a short-lived, file-scoped download token
+const downloadTokenSchema = z.object({
+  fileId: z.number().int().positive(),
+});
+
 router.post('/download-token', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const fileId = req.body?.fileId;
+    const parsed = downloadTokenSchema.safeParse(req.body);
+    const fileId = parsed.success ? parsed.data.fileId : undefined;
     const downloadToken = jwt.sign(
       { userId: req.user!.userId, purpose: 'file-download', ...(fileId && { fileId }) },
       JWT_SECRET,
@@ -288,7 +303,7 @@ router.post('/download-token', authMiddleware, async (req: AuthRequest, res: Res
     );
     res.json({ token: downloadToken });
   } catch (error) {
-    console.error('Generate download token error:', error);
+    logError('Generate download token error', error);
     res.status(500).json({ error: 'Failed to generate download token' });
   }
 });
@@ -304,7 +319,7 @@ router.get('/:id/download', (req: AuthRequest, res: Response, next) => {
         return;
       }
       // If token is scoped to a file, verify it matches the requested file
-      if (payload.fileId && payload.fileId !== parseInt(req.params.id)) {
+      if (payload.fileId && payload.fileId !== parseIntParam(req.params.id)) {
         res.status(403).json({ error: 'Token not valid for this file' });
         return;
       }
@@ -339,8 +354,8 @@ router.get('/:id/download', (req: AuthRequest, res: Response, next) => {
     }
 
     // Local files: stream from disk
-    const filePath = path.join(uploadDir, file.filename);
-    if (!fs.existsSync(filePath)) {
+    const filePath = path.resolve(uploadDir, file.filename);
+    if (!filePath.startsWith(uploadDir) || !fs.existsSync(filePath)) {
       res.status(404).json({ error: 'File not found on disk' });
       return;
     }
@@ -351,6 +366,7 @@ router.get('/:id/download', (req: AuthRequest, res: Response, next) => {
 
     res.setHeader('Content-Type', file.mimetype);
     res.setHeader('Content-Disposition', contentDisposition(disposition, file.originalName));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Accept-Ranges', 'bytes');
 
     const total = file.size;
@@ -372,7 +388,7 @@ router.get('/:id/download', (req: AuthRequest, res: Response, next) => {
       res.setHeader('Content-Length', end - start + 1);
       const stream = fs.createReadStream(filePath, { start, end });
       stream.on('error', (err) => {
-        console.error('File stream error:', err);
+        logError('File stream error', err);
         if (!res.headersSent) res.status(500).json({ error: 'Failed to read file' });
       });
       stream.pipe(res);
@@ -380,13 +396,13 @@ router.get('/:id/download', (req: AuthRequest, res: Response, next) => {
       res.setHeader('Content-Length', total);
       const stream = fs.createReadStream(filePath);
       stream.on('error', (err) => {
-        console.error('File stream error:', err);
+        logError('File stream error', err);
         if (!res.headersSent) res.status(500).json({ error: 'Failed to read file' });
       });
       stream.pipe(res);
     }
   } catch (error) {
-    console.error('Download file error:', error);
+    logError('Download file error', error);
     res.status(500).json({ error: 'Failed to download file' });
   }
 });
@@ -394,10 +410,10 @@ router.get('/:id/download', (req: AuthRequest, res: Response, next) => {
 // DELETE /files/:id - Delete a file
 router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const fileId = parseInt(req.params.id);
+    const fileId = parseIntParam(req.params.id);
     const userId = req.user!.userId;
 
-    if (isNaN(fileId)) {
+    if (!fileId) {
       res.status(400).json({ error: 'Invalid file ID' });
       return;
     }
@@ -428,12 +444,12 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
       try {
         await bucket.file(file.gcsPath).delete();
       } catch (err) {
-        console.error('Failed to delete from GCS:', err);
+        logError('Failed to delete from GCS', err);
       }
     } else {
       // Delete local file
-      const filePath = path.join(uploadDir, file.filename);
-      if (fs.existsSync(filePath)) {
+      const filePath = path.resolve(uploadDir, file.filename);
+      if (filePath.startsWith(uploadDir) && fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
     }
@@ -445,7 +461,7 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
 
     res.json({ message: 'File deleted' });
   } catch (error) {
-    console.error('Delete file error:', error);
+    logError('Delete file error', error);
     res.status(500).json({ error: 'Failed to delete file' });
   }
 });
@@ -469,7 +485,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
     res.json(files);
   } catch (error) {
-    console.error('List files error:', error);
+    logError('List files error', error);
     res.status(500).json({ error: 'Failed to list files' });
   }
 });

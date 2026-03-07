@@ -6,6 +6,8 @@ import { requireMessageAccess } from '../middleware/authorize.js';
 import { AuthRequest } from '../types.js';
 import { getIO } from '../websocket/index.js';
 import { USER_SELECT_BASIC, MESSAGE_INCLUDE_FULL, MESSAGE_INCLUDE_WITH_FILES } from '../db/selects.js';
+import { parseIntParam } from '../utils/params.js';
+import { logError } from '../utils/logger.js';
 
 const router = Router();
 
@@ -23,7 +25,7 @@ const editMessageSchema = z.object({
 // POST /messages/:id/reply - Reply to message (creates thread)
 router.post('/:id/reply', authMiddleware, requireMessageAccess, async (req: AuthRequest, res: Response) => {
   try {
-    const parentId = parseInt(req.params.id);
+    const parentId = parseIntParam(req.params.id)!;
     const userId = req.user!.userId;
     const { content, fileIds } = replySchema.parse(req.body);
     const parentMessage = req.message;
@@ -66,7 +68,7 @@ router.post('/:id/reply', authMiddleware, requireMessageAccess, async (req: Auth
       res.status(400).json({ error: error.issues });
       return;
     }
-    console.error('Reply error:', error);
+    logError('Reply error', error);
     res.status(500).json({ error: 'Failed to send reply' });
   }
 });
@@ -74,7 +76,7 @@ router.post('/:id/reply', authMiddleware, requireMessageAccess, async (req: Auth
 // GET /messages/:id/thread - Get thread messages
 router.get('/:id/thread', authMiddleware, requireMessageAccess, async (req: AuthRequest, res: Response) => {
   try {
-    const parentId = parseInt(req.params.id);
+    const parentId = parseIntParam(req.params.id)!;
 
     // Re-fetch parent with user details for the response
     const parentMessage = await prisma.message.findUnique({
@@ -98,7 +100,7 @@ router.get('/:id/thread', authMiddleware, requireMessageAccess, async (req: Auth
       replies,
     });
   } catch (error) {
-    console.error('Get thread error:', error);
+    logError('Get thread error', error);
     res.status(500).json({ error: 'Failed to get thread' });
   }
 });
@@ -106,7 +108,7 @@ router.get('/:id/thread', authMiddleware, requireMessageAccess, async (req: Auth
 // PATCH /messages/:id - Edit message
 router.patch('/:id', authMiddleware, requireMessageAccess, async (req: AuthRequest, res: Response) => {
   try {
-    const messageId = parseInt(req.params.id);
+    const messageId = parseIntParam(req.params.id)!;
     const userId = req.user!.userId;
     const { content } = editMessageSchema.parse(req.body);
     const message = req.message;
@@ -131,7 +133,7 @@ router.patch('/:id', authMiddleware, requireMessageAccess, async (req: AuthReque
       res.status(400).json({ error: error.issues });
       return;
     }
-    console.error('Edit message error:', error);
+    logError('Edit message error', error);
     res.status(500).json({ error: 'Failed to edit message' });
   }
 });
@@ -139,7 +141,7 @@ router.patch('/:id', authMiddleware, requireMessageAccess, async (req: AuthReque
 // DELETE /messages/:id - Soft delete message
 router.delete('/:id', authMiddleware, requireMessageAccess, async (req: AuthRequest, res: Response) => {
   try {
-    const messageId = parseInt(req.params.id);
+    const messageId = parseIntParam(req.params.id)!;
     const userId = req.user!.userId;
     const message = req.message;
 
@@ -155,7 +157,7 @@ router.delete('/:id', authMiddleware, requireMessageAccess, async (req: AuthRequ
 
     res.json({ message: 'Message deleted successfully' });
   } catch (error) {
-    console.error('Delete message error:', error);
+    logError('Delete message error', error);
     res.status(500).json({ error: 'Failed to delete message' });
   }
 });
@@ -163,7 +165,7 @@ router.delete('/:id', authMiddleware, requireMessageAccess, async (req: AuthRequ
 // POST /messages/:id/pin - Pin a message
 router.post('/:id/pin', authMiddleware, requireMessageAccess, async (req: AuthRequest, res: Response) => {
   try {
-    const messageId = parseInt(req.params.id);
+    const messageId = parseIntParam(req.params.id)!;
     const userId = req.user!.userId;
 
     const updated = await prisma.message.update({
@@ -180,7 +182,7 @@ router.post('/:id/pin', authMiddleware, requireMessageAccess, async (req: AuthRe
 
     res.json(updated);
   } catch (error) {
-    console.error('Pin message error:', error);
+    logError('Pin message error', error);
     res.status(500).json({ error: 'Failed to pin message' });
   }
 });
@@ -188,7 +190,7 @@ router.post('/:id/pin', authMiddleware, requireMessageAccess, async (req: AuthRe
 // DELETE /messages/:id/pin - Unpin a message
 router.delete('/:id/pin', authMiddleware, requireMessageAccess, async (req: AuthRequest, res: Response) => {
   try {
-    const messageId = parseInt(req.params.id);
+    const messageId = parseIntParam(req.params.id)!;
     const userId = req.user!.userId;
     const message = req.message;
 
@@ -206,7 +208,7 @@ router.delete('/:id/pin', authMiddleware, requireMessageAccess, async (req: Auth
 
     res.json(updated);
   } catch (error) {
-    console.error('Unpin message error:', error);
+    logError('Unpin message error', error);
     res.status(500).json({ error: 'Failed to unpin message' });
   }
 });

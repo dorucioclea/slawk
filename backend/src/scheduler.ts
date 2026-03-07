@@ -1,5 +1,6 @@
 import prisma from './db.js';
 import { getIO } from './websocket/index.js';
+import { logError } from './utils/logger.js';
 
 const INTERVAL_MS = 30_000; // 30 seconds
 
@@ -84,11 +85,11 @@ export function startScheduler(): NodeJS.Timeout {
             `Scheduler: sent message ${message.id} to channel ${scheduled.channelId} (was scheduled ${scheduled.id})`
           );
         } catch (err) {
-          console.error(`Scheduler: failed to send scheduled message ${scheduled.id}:`, err);
+          logError(`Scheduler: failed to send scheduled message ${scheduled.id}`, err);
         }
       }
     } catch (err) {
-      console.error('Scheduler tick error:', err);
+      logError('Scheduler tick error', err);
     }
   }, INTERVAL_MS);
 

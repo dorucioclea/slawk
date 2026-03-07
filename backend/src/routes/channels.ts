@@ -7,6 +7,8 @@ import { requireChannelMembership } from '../middleware/authorize.js';
 import { AuthRequest } from '../types.js';
 import { isUserOnline, getIO } from '../websocket/index.js';
 import { USER_SELECT_BASIC, USER_SELECT_FULL, MESSAGE_INCLUDE_FULL } from '../db/selects.js';
+import { parseIntParam } from '../utils/params.js';
+import { logError } from '../utils/logger.js';
 
 const router = Router();
 
@@ -17,6 +19,10 @@ const createChannelSchema = z.object({
     .refine(
       (name) => !name.includes('..') && !name.includes('/') && !name.includes('\\'),
       { message: 'Channel name cannot contain path traversal characters' }
+    )
+    .refine(
+      (name) => !/[\x00-\x1F\x7F]/.test(name),
+      { message: 'Channel name cannot contain control characters' }
     ),
   isPrivate: z.boolean().optional().default(false),
 });
@@ -31,6 +37,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       data: {
         name,
         isPrivate,
+        createdBy: userId,
         members: {
           create: {
             userId,
@@ -58,7 +65,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       res.status(400).json({ error: 'Channel name already exists' });
       return;
     }
-    console.error('Create channel error:', error);
+    logError('Create channel error', error);
     res.status(500).json({ error: 'Failed to create channel' });
   }
 });
@@ -117,7 +124,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
     res.json(channelsWithUnread);
   } catch (error) {
-    console.error('List channels error:', error);
+    logError('List channels error', error);
     res.status(500).json({ error: 'Failed to list channels' });
   }
 });
@@ -125,8 +132,8 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 // GET /channels/:id - Get single channel
 router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const channelId = parseInt(req.params.id);
-    if (isNaN(channelId)) {
+    const channelId = parseIntParam(req.params.id);
+    if (!channelId) {
       res.status(400).json({ error: 'Invalid channel ID' });
       return;
     }
@@ -153,18 +160,30 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    const isMember = channel.members.some(m => m.userId === userId);
+
     // Check access for private channels
-    if (channel.isPrivate) {
-      const isMember = channel.members.some(m => m.userId === userId);
-      if (!isMember) {
-        res.status(404).json({ error: 'Channel not found' });
-        return;
-      }
+    if (channel.isPrivate && !isMember) {
+      res.status(404).json({ error: 'Channel not found' });
+      return;
+    }
+
+    // Strip emails from member list for non-members viewing public channels
+    if (!isMember) {
+      const sanitized = {
+        ...channel,
+        members: channel.members.map(m => ({
+          ...m,
+          user: { id: m.user.id, name: m.user.name },
+        })),
+      };
+      res.json(sanitized);
+      return;
     }
 
     res.json(channel);
   } catch (error) {
-    console.error('Get channel error:', error);
+    logError('Get channel error', error);
     res.status(500).json({ error: 'Failed to get channel' });
   }
 });
@@ -172,8 +191,8 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
 // POST /channels/:id/join - Join a channel
 router.post('/:id/join', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const channelId = parseInt(req.params.id);
-    if (isNaN(channelId)) {
+    const channelId = parseIntParam(req.params.id);
+    if (!channelId) {
       res.status(400).json({ error: 'Invalid channel ID' });
       return;
     }
@@ -218,7 +237,7 @@ router.post('/:id/join', authMiddleware, async (req: AuthRequest, res: Response)
 
     res.json({ message: 'Joined channel successfully' });
   } catch (error) {
-    console.error('Join channel error:', error);
+    logError('Join channel error', error);
     res.status(500).json({ error: 'Failed to join channel' });
   }
 });
@@ -254,12 +273,14 @@ router.post('/:id/leave', authMiddleware, requireChannelMembership, async (req: 
           userId,
           memberCount: result.memberCount,
         });
+        // Evict user's sockets from the channel room so they stop receiving messages
+        io.in(`user:${userId}`).socketsLeave(`channel:${channelId}`);
       }
     }
 
     res.json({ message: 'Left channel successfully' });
   } catch (error) {
-    console.error('Leave channel error:', error);
+    logError('Leave channel error', error);
     res.status(500).json({ error: 'Failed to leave channel' });
   }
 });
@@ -291,7 +312,7 @@ router.get('/:id/members', authMiddleware, requireChannelMembership, async (req:
 
     res.json(enrichedMembers);
   } catch (error) {
-    console.error('List members error:', error);
+    logError('List members error', error);
     res.status(500).json({ error: 'Failed to list members' });
   }
 });
@@ -306,14 +327,10 @@ router.post('/:id/members', authMiddleware, requireChannelMembership, async (req
     const channelId = req.channelId!;
     const { userId } = addMemberSchema.parse(req.body);
 
-    // For private channels, only the channel creator (first member) can add users
+    // For private channels, only the channel creator can add users
     const channel = await prisma.channel.findUnique({ where: { id: channelId } });
     if (channel?.isPrivate) {
-      const firstMember = await prisma.channelMember.findFirst({
-        where: { channelId },
-        orderBy: { joinedAt: 'asc' },
-      });
-      if (firstMember?.userId !== req.user!.userId) {
+      if (channel.createdBy !== req.user!.userId) {
         res.status(403).json({ error: 'Only the channel creator can add members to private channels' });
         return;
       }
@@ -366,7 +383,7 @@ router.post('/:id/members', authMiddleware, requireChannelMembership, async (req
 
     res.json({ message: 'Member added successfully' });
   } catch (error) {
-    console.error('Add member error:', error);
+    logError('Add member error', error);
     res.status(500).json({ error: 'Failed to add member' });
   }
 });
@@ -413,7 +430,7 @@ router.post('/:id/read', authMiddleware, requireChannelMembership, async (req: A
       res.status(400).json({ error: error.issues });
       return;
     }
-    console.error('Mark channel read error:', error);
+    logError('Mark channel read error', error);
     res.status(500).json({ error: 'Failed to mark channel as read' });
   }
 });
@@ -463,7 +480,7 @@ router.post('/:id/unread', authMiddleware, requireChannelMembership, async (req:
       res.status(400).json({ error: error.issues });
       return;
     }
-    console.error('Mark channel unread error:', error);
+    logError('Mark channel unread error', error);
     res.status(500).json({ error: 'Failed to mark channel as unread' });
   }
 });
@@ -485,7 +502,7 @@ router.get('/:id/files', authMiddleware, requireChannelMembership, async (req: A
 
     res.json(files);
   } catch (error) {
-    console.error('Get channel files error:', error);
+    logError('Get channel files error', error);
     res.status(500).json({ error: 'Failed to get channel files' });
   }
 });
@@ -503,7 +520,7 @@ router.get('/:id/pins', authMiddleware, requireChannelMembership, async (req: Au
 
     res.json(pins);
   } catch (error) {
-    console.error('Get pinned messages error:', error);
+    logError('Get pinned messages error', error);
     res.status(500).json({ error: 'Failed to get pinned messages' });
   }
 });

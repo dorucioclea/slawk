@@ -2,8 +2,9 @@ import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthRequest, JwtPayload } from '../types.js';
 import { JWT_SECRET } from '../config.js';
+import prisma from '../db.js';
 
-export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction): void {
+export async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -20,6 +21,19 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
       res.status(401).json({ error: 'Invalid token' });
       return;
     }
+
+    // Validate tokenVersion against DB to support server-side revocation
+    if (decoded.tokenVersion !== undefined) {
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.userId },
+        select: { tokenVersion: true },
+      });
+      if (!user || user.tokenVersion !== decoded.tokenVersion) {
+        res.status(401).json({ error: 'Token revoked' });
+        return;
+      }
+    }
+
     req.user = decoded;
     next();
   } catch (error) {
