@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useMessageStore } from '@/stores/useMessageStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { PortalEmojiPicker } from '@/components/ui/emoji-picker';
 import type { Reaction } from '@/lib/types';
@@ -21,24 +20,25 @@ function shortcodeToNative(emoji: string): string {
 interface MessageReactionsProps {
   reactions: Reaction[];
   messageId: number;
+  onAddReaction: (messageId: number, emoji: string) => void;
+  onRemoveReaction: (messageId: number, emoji: string) => void;
 }
 
-export function MessageReactions({ reactions, messageId }: MessageReactionsProps) {
-  const { addReaction, removeReaction } = useMessageStore();
+export function MessageReactions({ reactions, messageId, onAddReaction, onRemoveReaction }: MessageReactionsProps) {
   const user = useAuthStore((s) => s.user);
   const [showPicker, setShowPicker] = useState(false);
   const currentUserId = user?.id ?? -1;
 
   const handleReactionClick = (emoji: string, hasReacted: boolean) => {
     if (hasReacted) {
-      removeReaction(messageId, emoji);
+      onRemoveReaction(messageId, emoji);
     } else {
-      addReaction(messageId, emoji);
+      onAddReaction(messageId, emoji);
     }
   };
 
   const handleEmojiSelect = (emoji: { native: string }) => {
-    addReaction(messageId, emoji.native);
+    onAddReaction(messageId, emoji.native);
     setShowPicker(false);
   };
 

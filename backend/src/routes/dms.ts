@@ -352,6 +352,98 @@ router.delete('/messages/:id', authMiddleware, requireDmOwnership, async (req: A
   }
 });
 
+// Matches either a Unicode emoji sequence or a :shortcode: format
+const emojiShortcodeRegex = /^:[a-z0-9_+-]+:$/;
+const unicodeEmojiRegex = /^\p{Extended_Pictographic}(\u200d\p{Extended_Pictographic}|\uFE0F)*$/u;
+
+const dmReactionSchema = z.object({
+  emoji: z.string().min(1).max(32)
+    .refine(val => unicodeEmojiRegex.test(val) || emojiShortcodeRegex.test(val), { message: 'Invalid emoji format' }),
+});
+
+// POST /dms/messages/:id/reactions - Add reaction to a DM
+router.post('/messages/:id/reactions', authMiddleware, requireDmAccess, async (req: AuthRequest, res: Response) => {
+  try {
+    const dmId = req.dm.id;
+    const userId = req.user!.userId;
+    const { emoji } = dmReactionSchema.parse(req.body);
+
+    const existing = await prisma.dMReaction.findUnique({
+      where: { userId_dmId_emoji: { userId, dmId, emoji } },
+    });
+
+    if (existing) {
+      res.status(400).json({ error: 'Reaction already exists' });
+      return;
+    }
+
+    const reaction = await prisma.dMReaction.create({
+      data: { emoji, userId, dmId },
+      include: { user: { select: { id: true, name: true } } },
+    });
+
+    // Broadcast to both DM participants
+    const dm = req.dm;
+    const io = getIO();
+    if (io) {
+      const payload = { dmId, reaction: { id: reaction.id, emoji, userId, user: reaction.user } };
+      io.to(`user:${dm.fromUserId}`).emit('dm:reaction:added', payload);
+      if (dm.fromUserId !== dm.toUserId) {
+        io.to(`user:${dm.toUserId}`).emit('dm:reaction:added', payload);
+      }
+    }
+
+    res.status(201).json(reaction);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: error.issues });
+      return;
+    }
+    logError('Add DM reaction error', error);
+    res.status(500).json({ error: 'Failed to add reaction' });
+  }
+});
+
+// DELETE /dms/messages/:id/reactions/:emoji - Remove reaction from a DM
+router.delete('/messages/:id/reactions/:emoji', authMiddleware, requireDmAccess, async (req: AuthRequest, res: Response) => {
+  try {
+    const dmId = req.dm.id;
+    const userId = req.user!.userId;
+    const rawEmoji = decodeURIComponent(req.params.emoji as string);
+
+    if (!rawEmoji || rawEmoji.length > 32 || !(unicodeEmojiRegex.test(rawEmoji) || emojiShortcodeRegex.test(rawEmoji))) {
+      res.status(400).json({ error: 'Invalid emoji format' });
+      return;
+    }
+
+    const reaction = await prisma.dMReaction.findUnique({
+      where: { userId_dmId_emoji: { userId, dmId, emoji: rawEmoji } },
+    });
+
+    if (!reaction) {
+      res.status(404).json({ error: 'Reaction not found' });
+      return;
+    }
+
+    await prisma.dMReaction.delete({ where: { id: reaction.id } });
+
+    const dm = req.dm;
+    const io = getIO();
+    if (io) {
+      const payload = { dmId, emoji: rawEmoji, userId };
+      io.to(`user:${dm.fromUserId}`).emit('dm:reaction:removed', payload);
+      if (dm.fromUserId !== dm.toUserId) {
+        io.to(`user:${dm.toUserId}`).emit('dm:reaction:removed', payload);
+      }
+    }
+
+    res.json({ message: 'Reaction removed' });
+  } catch (error) {
+    logError('Remove DM reaction error', error);
+    res.status(500).json({ error: 'Failed to remove reaction' });
+  }
+});
+
 // POST /dms/:userId/read - Mark all messages from a user as read
 router.post('/:userId/read', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {

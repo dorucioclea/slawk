@@ -24,6 +24,7 @@ model User {
   messages           Message[]
   channels           ChannelMember[]
   reactions          Reaction[]
+  dmReactions        DMReaction[]
   files              File[]
   sentDMs            DirectMessage[] @relation("SentMessages")
   receivedDMs        DirectMessage[] @relation("ReceivedMessages")
@@ -132,10 +133,25 @@ model DirectMessage {
   toUser     User             @relation("ReceivedMessages", fields: [toUserId], references: [id])
   parent     DirectMessage?   @relation("DMThread", fields: [threadId], references: [id])
   replies    DirectMessage[]  @relation("DMThread")
+  reactions  DMReaction[]
 
   @@index([fromUserId, toUserId])
   @@index([toUserId, fromUserId])
   @@index([threadId])
+}
+
+model DMReaction {
+  id        Int      @id @default(autoincrement())
+  emoji     String   @db.VarChar(50)
+  userId    Int
+  dmId      Int
+  createdAt DateTime @default(now())
+
+  user User           @relation(fields: [userId], references: [id])
+  dm   DirectMessage   @relation(fields: [dmId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dmId, emoji])
+  @@index([dmId])
 }
 
 model Bookmark {

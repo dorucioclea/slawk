@@ -17,6 +17,8 @@ import { useProfileStore } from '@/stores/useProfileStore';
 import { useBookmarkStore } from '@/stores/useBookmarkStore';
 import { MessageToolbar } from './MessageToolbar';
 import { MessageActionsMenu } from './MessageActionsMenu';
+import { MessageReactions } from './MessageReactions';
+import { PortalEmojiPicker } from '@/components/ui/emoji-picker';
 import { MessageInput } from './MessageInput';
 import { ThreadPanel } from './ThreadPanel';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
@@ -52,11 +54,14 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
   const storeSendMessage = useDMStore((s) => s.sendMessage);
   const storeEditMessage = useDMStore((s) => s.editMessage);
   const storeDeleteMessage = useDMStore((s) => s.deleteMessage);
+  const storeAddReaction = useDMStore((s) => s.addReaction);
+  const storeRemoveReaction = useDMStore((s) => s.removeReaction);
   const updateReplyCount = useDMStore((s) => s.updateReplyCount);
 
   const [activeThreadId, setActiveThreadId] = useState<number | null>(null);
   const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
   const [showMoreMenuId, setShowMoreMenuId] = useState<number | null>(null);
+  const [showEmojiPickerId, setShowEmojiPickerId] = useState<number | null>(null);
   const [showPins, setShowPins] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
@@ -101,7 +106,7 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
   };
 
   const keepToolbarOpen = (msgId: number) =>
-    showMoreMenuId === msgId || editingId === msgId;
+    showMoreMenuId === msgId || editingId === msgId || showEmojiPickerId === msgId;
 
   const handleOpenThread = useCallback((messageId: number) => {
     setActiveThreadId(messageId);
@@ -308,6 +313,14 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
                               )}
                             </div>
                           )}
+                          {msg.reactions.length > 0 && (
+                            <MessageReactions
+                              reactions={msg.reactions}
+                              messageId={msg.id}
+                              onAddReaction={(id, emoji) => storeAddReaction(id, emoji, userId)}
+                              onRemoveReaction={(id, emoji) => storeRemoveReaction(id, emoji, userId)}
+                            />
+                          )}
                           {msg.replyCount > 0 && (
                             <button
                               data-testid={`dm-thread-count-${msg.id}`}
@@ -325,6 +338,7 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
                           <MessageToolbar
                             className="absolute -top-4 right-2"
                             testIdPrefix="dm"
+                            onEmojiClick={() => setShowEmojiPickerId((prev) => prev === msg.id ? null : msg.id)}
                             onBookmarkClick={() => toggleBookmark(msg.id)}
                             isBookmarked={bookmarkedIds.has(msg.id)}
                             onThreadClick={() => handleOpenThread(msg.id)}
@@ -332,6 +346,18 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
                               setShowMoreMenuId((prev) =>
                                 prev === msg.id ? null : msg.id,
                               ) : undefined}
+                          />
+                        )}
+
+                        {/* Emoji Picker from hover toolbar */}
+                        {showEmojiPickerId === msg.id && (
+                          <PortalEmojiPicker
+                            anchorClassName="absolute -top-4 right-2 mt-9"
+                            onEmojiSelect={(emoji) => {
+                              storeAddReaction(msg.id, emoji.native, userId);
+                              setShowEmojiPickerId(null);
+                            }}
+                            onClickOutside={() => setShowEmojiPickerId(null)}
                           />
                         )}
 

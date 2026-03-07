@@ -35,7 +35,7 @@ export function Message({ message, showAvatar, isCompact, onOpenThread, readOnly
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [lightboxAlt, setLightboxAlt] = useState<string>('');
-  const { addReaction, editMessage, deleteMessage } = useMessageStore();
+  const { addReaction, removeReaction, editMessage, deleteMessage } = useMessageStore();
   const currentUser = useAuthStore((s) => s.user);
   const { openProfile } = useProfileStore();
   const toggleBookmark = useBookmarkStore((s) => s.toggle);
@@ -256,6 +256,8 @@ export function Message({ message, showAvatar, isCompact, onOpenThread, readOnly
           <MessageReactions
             reactions={message.reactions}
             messageId={message.id}
+            onAddReaction={addReaction}
+            onRemoveReaction={removeReaction}
           />
         )}
 

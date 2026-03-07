@@ -442,6 +442,14 @@ export interface ApiDMConversation {
   unreadCount: number;
 }
 
+export interface ApiDMReaction {
+  id: number;
+  emoji: string;
+  userId: number;
+  dmId: number;
+  user: { id: number; name: string };
+}
+
 export interface ApiDirectMessage {
   id: number;
   content: string;
@@ -454,6 +462,7 @@ export interface ApiDirectMessage {
   deletedAt: string | null;
   fromUser: { id: number; name: string; email: string; avatar?: string | null };
   toUser: { id: number; name: string; email: string; avatar?: string | null };
+  reactions?: ApiDMReaction[];
   _count?: { replies: number };
 }
 
@@ -497,6 +506,19 @@ export function replyToDM(dmId: number, content: string) {
   return request<ApiDirectMessage>(`/dms/messages/${dmId}/reply`, {
     method: 'POST',
     body: JSON.stringify({ content }),
+  });
+}
+
+export function addDMReaction(dmId: number, emoji: string) {
+  return request<ApiDMReaction>(`/dms/messages/${dmId}/reactions`, {
+    method: 'POST',
+    body: JSON.stringify({ emoji }),
+  });
+}
+
+export function removeDMReaction(dmId: number, emoji: string) {
+  return request<{ message: string }>(`/dms/messages/${dmId}/reactions/${encodeURIComponent(emoji)}`, {
+    method: 'DELETE',
   });
 }
 

@@ -1,5 +1,7 @@
 import { create } from 'zustand';
-import { getConversation, sendDM, editDM, deleteDM, type ApiDirectMessage } from '@/lib/api';
+import { getConversation, sendDM, editDM, deleteDM, addDMReaction, removeDMReaction, type ApiDirectMessage, type ApiDMReaction } from '@/lib/api';
+import { useAuthStore } from './useAuthStore';
+import type { Reaction } from '@/lib/types';
 
 export interface DMMessage {
   id: number;
@@ -10,6 +12,23 @@ export interface DMMessage {
   editedAt?: Date | null;
   threadId?: number | null;
   replyCount: number;
+  reactions: Reaction[];
+}
+
+function groupReactions(apiReactions?: ApiDMReaction[]): Reaction[] {
+  if (!apiReactions || apiReactions.length === 0) return [];
+  const map = new Map<string, Reaction>();
+  for (const r of apiReactions) {
+    const existing = map.get(r.emoji);
+    if (existing) {
+      existing.count++;
+      existing.userIds.push(r.userId);
+      existing.userNames.push(r.user.name);
+    } else {
+      map.set(r.emoji, { emoji: r.emoji, count: 1, userIds: [r.userId], userNames: [r.user.name] });
+    }
+  }
+  return [...map.values()];
 }
 
 function transformDM(dm: ApiDirectMessage): DMMessage {
@@ -22,6 +41,7 @@ function transformDM(dm: ApiDirectMessage): DMMessage {
     editedAt: dm.editedAt ? new Date(dm.editedAt) : null,
     threadId: dm.threadId ?? null,
     replyCount: dm._count?.replies ?? 0,
+    reactions: groupReactions(dm.reactions),
   };
 }
 
@@ -40,6 +60,10 @@ interface DMState {
   addIncomingMessage: (dm: ApiDirectMessage, currentUserId: number) => void;
   onDMUpdated: (dm: ApiDirectMessage, currentUserId: number) => void;
   onDMDeleted: (data: { dmId: number; fromUserId: number; toUserId: number }, currentUserId: number) => void;
+  addReaction: (dmId: number, emoji: string, conversationUserId: number) => void;
+  removeReaction: (dmId: number, emoji: string, conversationUserId: number) => void;
+  onReactionAdded: (data: { dmId: number; reaction: { emoji: string; userId: number; user: { name: string } } }) => void;
+  onReactionRemoved: (data: { dmId: number; emoji: string; userId: number }) => void;
   updateReplyCount: (messageId: number, userId: number, count: number) => void;
   incrementReplyCount: (messageId: number, userId: number) => void;
   clearConversation: (userId: number) => void;
@@ -134,6 +158,130 @@ export const useDMStore = create<DMState>((set, get) => ({
         ),
       },
     }));
+  },
+
+  addReaction: async (dmId: number, emoji: string, conversationUserId: number) => {
+    const currentUser = useAuthStore.getState().user;
+    if (!currentUser) return;
+    const userId = currentUser.id;
+
+    // Optimistic update
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [conversationUserId]: (state.messages[conversationUserId] ?? []).map((m) => {
+          if (m.id !== dmId) return m;
+          const existing = m.reactions.find((r) => r.emoji === emoji);
+          if (existing) {
+            if (existing.userIds.includes(userId)) return m;
+            return { ...m, reactions: m.reactions.map((r) => r.emoji === emoji ? { ...r, count: r.count + 1, userIds: [...r.userIds, userId], userNames: [...r.userNames, currentUser.name] } : r) };
+          }
+          return { ...m, reactions: [...m.reactions, { emoji, count: 1, userIds: [userId], userNames: [currentUser.name] }] };
+        }),
+      },
+    }));
+
+    try {
+      await addDMReaction(dmId, emoji);
+    } catch {
+      // Revert on failure by refetching
+      get().fetchConversation(conversationUserId);
+    }
+  },
+
+  removeReaction: async (dmId: number, emoji: string, conversationUserId: number) => {
+    const currentUser = useAuthStore.getState().user;
+    if (!currentUser) return;
+    const userId = currentUser.id;
+
+    // Optimistic update
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [conversationUserId]: (state.messages[conversationUserId] ?? []).map((m) => {
+          if (m.id !== dmId) return m;
+          return {
+            ...m,
+            reactions: m.reactions
+              .map((r) => {
+                if (r.emoji !== emoji) return r;
+                const idx = r.userIds.indexOf(userId);
+                if (idx === -1) return r;
+                return { ...r, count: r.count - 1, userIds: r.userIds.filter((_, i) => i !== idx), userNames: r.userNames.filter((_, i) => i !== idx) };
+              })
+              .filter((r) => r.count > 0),
+          };
+        }),
+      },
+    }));
+
+    try {
+      await removeDMReaction(dmId, emoji);
+    } catch {
+      get().fetchConversation(conversationUserId);
+    }
+  },
+
+  onReactionAdded: (data: { dmId: number; reaction: { emoji: string; userId: number; user: { name: string } } }) => {
+    // Skip own reactions — already applied optimistically
+    const currentUser = useAuthStore.getState().user;
+    if (currentUser && data.reaction.userId === currentUser.id) return;
+    const state = get();
+    // Find which conversation contains this DM
+    for (const [userIdStr, msgs] of Object.entries(state.messages)) {
+      const msg = msgs.find((m) => m.id === data.dmId);
+      if (!msg) continue;
+      const uid = Number(userIdStr);
+      // Skip if already applied (optimistic update)
+      const existing = msg.reactions.find((r) => r.emoji === data.reaction.emoji);
+      if (existing?.userIds.includes(data.reaction.userId)) return;
+      set((s) => ({
+        messages: {
+          ...s.messages,
+          [uid]: (s.messages[uid] ?? []).map((m) => {
+            if (m.id !== data.dmId) return m;
+            const ex = m.reactions.find((r) => r.emoji === data.reaction.emoji);
+            if (ex) {
+              return { ...m, reactions: m.reactions.map((r) => r.emoji === data.reaction.emoji ? { ...r, count: r.count + 1, userIds: [...r.userIds, data.reaction.userId], userNames: [...r.userNames, data.reaction.user.name] } : r) };
+            }
+            return { ...m, reactions: [...m.reactions, { emoji: data.reaction.emoji, count: 1, userIds: [data.reaction.userId], userNames: [data.reaction.user.name] }] };
+          }),
+        },
+      }));
+      return;
+    }
+  },
+
+  onReactionRemoved: (data: { dmId: number; emoji: string; userId: number }) => {
+    // Skip own removals — already applied optimistically
+    const currentUser = useAuthStore.getState().user;
+    if (currentUser && data.userId === currentUser.id) return;
+    const state = get();
+    for (const [userIdStr, msgs] of Object.entries(state.messages)) {
+      const msg = msgs.find((m) => m.id === data.dmId);
+      if (!msg) continue;
+      const uid = Number(userIdStr);
+      set((s) => ({
+        messages: {
+          ...s.messages,
+          [uid]: (s.messages[uid] ?? []).map((m) => {
+            if (m.id !== data.dmId) return m;
+            return {
+              ...m,
+              reactions: m.reactions
+                .map((r) => {
+                  if (r.emoji !== data.emoji) return r;
+                  const idx = r.userIds.indexOf(data.userId);
+                  if (idx === -1) return r;
+                  return { ...r, count: r.count - 1, userIds: r.userIds.filter((_, i) => i !== idx), userNames: r.userNames.filter((_, i) => i !== idx) };
+                })
+                .filter((r) => r.count > 0),
+            };
+          }),
+        },
+      }));
+      return;
+    }
   },
 
   incrementReplyCount: (messageId: number, userId: number) => {

@@ -38,4 +38,5 @@ export const MESSAGE_INCLUDE_WITH_FILES = {
 export const DM_INCLUDE_USERS = {
   fromUser: { select: USER_SELECT_BASIC },
   toUser: { select: USER_SELECT_BASIC },
+  reactions: { include: { user: { select: { id: true, name: true } } } },
 } as const;
