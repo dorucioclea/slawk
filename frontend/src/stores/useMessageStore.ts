@@ -73,6 +73,8 @@ interface MessageState {
   onMessageNew: (msg: api.ApiMessage) => void;
   onMessageUpdated: (msg: api.ApiMessage) => void;
   onMessageDeleted: (data: { messageId: number }) => void;
+  onReactionAdded: (data: { messageId: number; reaction: { emoji: string; userId: number; user: { name: string } } }) => void;
+  onReactionRemoved: (data: { messageId: number; emoji: string; userId: number }) => void;
 }
 
 export const useMessageStore = create<MessageState>((set, get) => ({
@@ -209,6 +211,58 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   onMessageDeleted: (data: { messageId: number }) => {
     set({
       messages: get().messages.filter((m) => m.id !== data.messageId),
+    });
+  },
+
+  onReactionAdded: (data) => {
+    const currentUserId = getUserId();
+    // Skip if this is our own reaction (already applied optimistically)
+    if (data.reaction.userId === currentUserId) return;
+
+    set({
+      messages: get().messages.map((msg) => {
+        if (msg.id !== data.messageId) return msg;
+        const existing = msg.reactions.find((r) => r.emoji === data.reaction.emoji);
+        if (existing) {
+          if (existing.userIds.includes(data.reaction.userId)) return msg;
+          return {
+            ...msg,
+            reactions: msg.reactions.map((r) =>
+              r.emoji === data.reaction.emoji
+                ? { ...r, count: r.count + 1, userIds: [...r.userIds, data.reaction.userId], userNames: [...r.userNames, data.reaction.user.name] }
+                : r,
+            ),
+          };
+        }
+        return {
+          ...msg,
+          reactions: [...msg.reactions, { emoji: data.reaction.emoji, count: 1, userIds: [data.reaction.userId], userNames: [data.reaction.user.name] }],
+        };
+      }),
+    });
+  },
+
+  onReactionRemoved: (data) => {
+    const currentUserId = getUserId();
+    // Skip if this is our own reaction (already applied optimistically)
+    if (data.userId === currentUserId) return;
+
+    set({
+      messages: get().messages.map((msg) => {
+        if (msg.id !== data.messageId) return msg;
+        return {
+          ...msg,
+          reactions: msg.reactions
+            .map((r) => {
+              if (r.emoji !== data.emoji) return r;
+              const idx = r.userIds.indexOf(data.userId);
+              const newUserIds = r.userIds.filter((id) => id !== data.userId);
+              const newUserNames = r.userNames.filter((_, i) => i !== idx);
+              return { ...r, count: newUserIds.length, userIds: newUserIds, userNames: newUserNames };
+            })
+            .filter((r) => r.count > 0),
+        };
+      }),
     });
   },
 

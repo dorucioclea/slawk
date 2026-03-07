@@ -173,6 +173,14 @@ function AppShell() {
       useChannelStore.getState().fetchChannels();
     };
 
+    const handleReactionAdded = (data: { messageId: number; reaction: { emoji: string; userId: number; user: { name: string } } }) => {
+      useMessageStore.getState().onReactionAdded(data);
+    };
+
+    const handleReactionRemoved = (data: { messageId: number; emoji: string; userId: number }) => {
+      useMessageStore.getState().onReactionRemoved(data);
+    };
+
     socket.on('message:new', handleNewMessage);
     socket.on('message:updated', handleUpdatedMessage);
     socket.on('message:deleted', handleDeletedMessage);
@@ -181,6 +189,8 @@ function AppShell() {
     socket.on('channel:member-added', handleMemberAdded);
     socket.on('channel:member-left', handleMemberLeft);
     socket.on('channel:joined', handleChannelJoined);
+    socket.on('reaction:added', handleReactionAdded);
+    socket.on('reaction:removed', handleReactionRemoved);
 
     return () => {
       socket.off('message:new', handleNewMessage);
@@ -191,6 +201,8 @@ function AppShell() {
       socket.off('channel:member-added', handleMemberAdded);
       socket.off('channel:member-left', handleMemberLeft);
       socket.off('channel:joined', handleChannelJoined);
+      socket.off('reaction:added', handleReactionAdded);
+      socket.off('reaction:removed', handleReactionRemoved);
       disconnectSocket();
     };
   }, []);

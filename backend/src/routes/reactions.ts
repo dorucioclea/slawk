@@ -4,6 +4,7 @@ import prisma from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requireMessageAccess } from '../middleware/authorize.js';
 import { AuthRequest } from '../types.js';
+import { getIO } from '../websocket/index.js';
 
 const router = Router();
 
@@ -43,6 +44,16 @@ router.post('/:id/reactions', authMiddleware, requireMessageAccess, async (req: 
       },
     });
 
+    // Broadcast to channel so other users see the reaction in real-time
+    const channelId = req.channelId;
+    if (channelId) {
+      const io = getIO();
+      io?.to(`channel:${channelId}`).emit('reaction:added', {
+        messageId,
+        reaction: { id: reaction.id, emoji, userId, user: reaction.user },
+      });
+    }
+
     res.status(201).json(reaction);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -80,6 +91,17 @@ router.delete('/:id/reactions/:emoji', authMiddleware, requireMessageAccess, asy
     await prisma.reaction.delete({
       where: { id: reaction.id },
     });
+
+    // Broadcast to channel so other users see the removal in real-time
+    const channelId = req.channelId;
+    if (channelId) {
+      const io = getIO();
+      io?.to(`channel:${channelId}`).emit('reaction:removed', {
+        messageId,
+        emoji,
+        userId,
+      });
+    }
 
     res.json({ message: 'Reaction removed' });
   } catch (error) {
