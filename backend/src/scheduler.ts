@@ -1,5 +1,6 @@
 import prisma from './db.js';
 import { getIO } from './websocket/index.js';
+import { USER_SELECT_BASIC, FILE_SELECT } from './db/selects.js';
 import { logError } from './utils/logger.js';
 
 const INTERVAL_MS = 30_000; // 30 seconds
@@ -15,7 +16,7 @@ export function startScheduler(): NodeJS.Timeout {
           scheduledAt: { lte: new Date() },
         },
         include: {
-          user: { select: { id: true, name: true, email: true, avatar: true } },
+          user: { select: USER_SELECT_BASIC },
           channel: { select: { id: true, name: true } },
         },
         take: 50, // process up to 50 per tick
@@ -64,12 +65,8 @@ export function startScheduler(): NodeJS.Timeout {
                 channelId: scheduled.channelId,
               },
               include: {
-                user: {
-                  select: { id: true, name: true, email: true, avatar: true },
-                },
-                files: {
-                  select: { id: true, filename: true, originalName: true, mimetype: true, size: true, url: true },
-                },
+                user: { select: USER_SELECT_BASIC },
+                files: { select: FILE_SELECT },
               },
             });
           });

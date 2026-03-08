@@ -96,7 +96,7 @@ export async function requireFileAccess(
   const file = await prisma.file.findUnique({
     where: { id: fileId },
     include: {
-      user: { select: { id: true, name: true, email: true } },
+      user: { select: { id: true, name: true } },
     },
   });
 
