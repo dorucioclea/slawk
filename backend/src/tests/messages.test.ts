@@ -45,7 +45,7 @@ describe('Messages', () => {
       expect(res.status).toBe(201);
       expect(res.body.content).toBe('Hello, world!');
       expect(res.body.channelId).toBe(channelId);
-      expect(res.body.user.email).toBe(testUser.email);
+      expect(res.body.user.name).toBe(testUser.name);
     });
 
     it('should require channel membership', async () => {

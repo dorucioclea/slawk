@@ -233,6 +233,13 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    // Only expose email when viewing your own profile
+    if (userId !== req.user!.userId) {
+      const { email: _, ...safeUser } = user;
+      res.json(safeUser);
+      return;
+    }
+
     res.json(user);
   } catch (error) {
     logError('Get user error', error);

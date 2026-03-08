@@ -31,7 +31,6 @@ function transformApiMessage(msg: api.ApiMessage): Message {
     user: {
       id: msg.user.id,
       name: msg.user.name,
-      email: msg.user.email,
       avatar: msg.user.avatar,
     },
     channelId: msg.channelId,

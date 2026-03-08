@@ -163,7 +163,7 @@ describe('Channels', () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveLength(1);
-      expect(res.body[0].user.email).toBe(testUser.email);
+      expect(res.body[0].user.name).toBe(testUser.name);
     });
   });
 });

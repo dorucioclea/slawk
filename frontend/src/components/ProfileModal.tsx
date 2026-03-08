@@ -152,7 +152,7 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
               </div>
               <div>
                 <p className="text-[18px] font-bold text-slack-primary">{profile.name}</p>
-                <p className="text-[13px] text-slack-hint">{profile.email}</p>
+                {profile.email && <p className="text-[13px] text-slack-hint">{profile.email}</p>}
               </div>
             </div>
 

@@ -3,7 +3,6 @@
 export const USER_SELECT_BASIC = {
   id: true,
   name: true,
-  email: true,
   avatar: true,
 } as const;
 
