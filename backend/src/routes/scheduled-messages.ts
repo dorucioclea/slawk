@@ -136,4 +136,130 @@ router.delete('/scheduled/:id', authMiddleware, async (req: AuthRequest, res: Re
   }
 });
 
+// PATCH /messages/scheduled/:id — edit a scheduled message
+const editScheduleSchema = z.object({
+  content: z.string().min(1).max(4000)
+    .refine(val => val.trim().length > 0, { message: 'Message content cannot be empty' })
+    .refine(val => !val.includes('\u0000'), { message: 'Content cannot contain null bytes' })
+    .optional(),
+  scheduledAt: z.string().datetime().optional(),
+}).refine(data => data.content || data.scheduledAt, { message: 'At least one field must be provided' });
+
+router.patch('/scheduled/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const id = parseIntParam(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: 'Invalid message ID' });
+      return;
+    }
+
+    const parsed = editScheduleSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message || 'Invalid input' });
+      return;
+    }
+
+    const scheduled = await prisma.scheduledMessage.findUnique({ where: { id } });
+    if (!scheduled) {
+      res.status(404).json({ error: 'Scheduled message not found' });
+      return;
+    }
+    if (scheduled.userId !== userId) {
+      res.status(403).json({ error: 'Not authorized' });
+      return;
+    }
+    if (scheduled.sent) {
+      res.status(400).json({ error: 'Message has already been sent' });
+      return;
+    }
+
+    const updateData: { content?: string; scheduledAt?: Date } = {};
+    if (parsed.data.content) updateData.content = parsed.data.content;
+    if (parsed.data.scheduledAt) {
+      const newDate = new Date(parsed.data.scheduledAt);
+      if (newDate <= new Date()) {
+        res.status(400).json({ error: 'scheduledAt must be in the future' });
+        return;
+      }
+      updateData.scheduledAt = newDate;
+    }
+
+    const updated = await prisma.scheduledMessage.update({
+      where: { id },
+      data: updateData,
+      include: { channel: { select: { id: true, name: true } } },
+    });
+
+    res.json(updated);
+  } catch (error) {
+    logError('Edit scheduled message error', error);
+    res.status(500).json({ error: 'Failed to edit scheduled message' });
+  }
+});
+
+// POST /messages/scheduled/:id/send — send a scheduled message immediately
+router.post('/scheduled/:id/send', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const id = parseIntParam(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: 'Invalid message ID' });
+      return;
+    }
+
+    const scheduled = await prisma.scheduledMessage.findUnique({ where: { id } });
+    if (!scheduled) {
+      res.status(404).json({ error: 'Scheduled message not found' });
+      return;
+    }
+    if (scheduled.userId !== userId) {
+      res.status(403).json({ error: 'Not authorized' });
+      return;
+    }
+    if (scheduled.sent) {
+      res.status(400).json({ error: 'Message has already been sent' });
+      return;
+    }
+
+    // Check channel membership
+    const isMember = await checkChannelMembership(userId, scheduled.channelId);
+    if (!isMember) {
+      res.status(403).json({ error: 'You are no longer a member of the channel' });
+      return;
+    }
+
+    // Atomically send
+    const message = await prisma.$transaction(async (tx) => {
+      await tx.scheduledMessage.update({
+        where: { id },
+        data: { sent: true },
+      });
+      return tx.message.create({
+        data: {
+          content: scheduled.content,
+          userId: scheduled.userId,
+          channelId: scheduled.channelId,
+        },
+        include: {
+          user: { select: { id: true, name: true, avatar: true } },
+          files: { select: { id: true, filename: true, originalName: true, mimetype: true, size: true, url: true } },
+        },
+      });
+    });
+
+    // Broadcast via WebSocket
+    const { getIO } = await import('../websocket/index.js');
+    const io = getIO();
+    if (io) {
+      io.to(`channel:${scheduled.channelId}`).emit('message:new', message);
+    }
+
+    res.json({ success: true, message });
+  } catch (error) {
+    logError('Send scheduled message now error', error);
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
 export default router;

@@ -607,6 +607,19 @@ export function cancelScheduledMessage(id: number) {
   return request<{ success: boolean }>(`/messages/scheduled/${id}`, { method: 'DELETE' });
 }
 
+export function editScheduledMessage(id: number, data: { content?: string; scheduledAt?: string }) {
+  return request<ApiScheduledMessage>(`/messages/scheduled/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export function sendScheduledMessageNow(id: number) {
+  return request<{ success: boolean; message: unknown }>(`/messages/scheduled/${id}/send`, {
+    method: 'POST',
+  });
+}
+
 // ---- Admin ----
 
 export interface AdminUser {
