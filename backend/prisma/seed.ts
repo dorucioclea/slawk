@@ -416,8 +416,8 @@ function minsAgo(mins: number): Date {
 }
 
 async function main() {
-  if (process.env.NODE_ENV === 'production') {
-    console.error('Refusing to seed in production. Set NODE_ENV to something else to seed.');
+  if (process.env.NODE_ENV === 'production' && process.env.RUN_SEED !== 'true') {
+    console.error('Refusing to seed in production. Set RUN_SEED=true to override.');
     process.exit(1);
   }
   console.log('🌱 Seeding Slawk database...\n');
