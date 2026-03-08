@@ -219,7 +219,14 @@ function AddPeopleForm({
   );
 }
 
+const CHANNEL_ROLE_BADGE: Record<string, { label: string; className: string } | undefined> = {
+  OWNER: { label: 'Owner', className: 'bg-amber-100 text-amber-700' },
+  MODERATOR: { label: 'Mod', className: 'bg-indigo-100 text-indigo-700' },
+};
+
 function MemberRow({ member, onClick }: { member: ChannelMember; onClick?: () => void }) {
+  const roleBadge = member.channelRole ? CHANNEL_ROLE_BADGE[member.channelRole] : undefined;
+
   return (
     <button
       data-testid={`member-row-${member.user.id}`}
@@ -233,6 +240,11 @@ function MemberRow({ member, onClick }: { member: ChannelMember; onClick?: () =>
         status={member.user.isOnline ? 'online' : 'offline'}
       />
       <span className="text-[14px] text-slack-primary truncate">{member.user.name}</span>
+      {roleBadge && (
+        <span className={`ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${roleBadge.className}`}>
+          {roleBadge.label}
+        </span>
+      )}
     </button>
   );
 }

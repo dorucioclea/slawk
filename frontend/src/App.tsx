@@ -109,13 +109,15 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
   const isHydrating = useAuthStore((s) => s.isHydrating);
   const navigate = useNavigate();
 
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'OWNER';
+
   useEffect(() => {
-    if (!isHydrating && user && user.role !== 'ADMIN') {
+    if (!isHydrating && user && !isAdmin) {
       navigate('/', { replace: true });
     }
-  }, [user, isHydrating, navigate]);
+  }, [user, isHydrating, isAdmin, navigate]);
 
-  if (isHydrating || !user || user.role !== 'ADMIN') return null;
+  if (isHydrating || !user || !isAdmin) return null;
   return <>{children}</>;
 }
 

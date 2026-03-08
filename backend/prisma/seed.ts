@@ -446,7 +446,7 @@ async function main() {
           status: u.status,
           avatar: u.avatar,
           lastSeen: u.status === 'offline' ? minsAgo(300) : minsAgo(5),
-          ...(i === 0 ? { role: 'ADMIN' } : {}),
+          ...(i === 0 ? { role: 'OWNER' as const } : {}),
         },
       })
     )
@@ -463,15 +463,23 @@ async function main() {
   const publicChannels = channels.filter(c => !c.isPrivate);
   const privateChannel = channels.find(c => c.isPrivate)!;
 
-  // Memberships — all users in public channels
+  // Memberships — all users in public channels (first user is channel OWNER)
   for (const ch of publicChannels) {
     await prisma.channelMember.createMany({
-      data: users.map(u => ({ userId: u.id, channelId: ch.id })),
+      data: users.map((u, i) => ({
+        userId: u.id,
+        channelId: ch.id,
+        role: i === 0 ? 'OWNER' as const : 'MEMBER' as const,
+      })),
     });
   }
-  // Founders private channel: Hank (7), Iris (8), Jack (9)
+  // Founders private channel: Hank (7) is OWNER, Iris (8), Jack (9)
   await prisma.channelMember.createMany({
-    data: [7, 8, 9].map(i => ({ userId: users[i].id, channelId: privateChannel.id })),
+    data: [7, 8, 9].map((i, idx) => ({
+      userId: users[i].id,
+      channelId: privateChannel.id,
+      role: idx === 0 ? 'OWNER' as const : 'MEMBER' as const,
+    })),
   });
   console.log('  Added channel memberships');
 

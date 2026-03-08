@@ -9,9 +9,16 @@ datasource db {
 }
 
 enum Role {
+  OWNER
   ADMIN
   MEMBER
   GUEST
+}
+
+enum ChannelRole {
+  OWNER
+  MODERATOR
+  MEMBER
 }
 
 model User {
@@ -88,7 +95,8 @@ model AuditLog {
 model ChannelMember {
   userId    Int
   channelId Int
-  joinedAt  DateTime @default(now())
+  role      ChannelRole @default(MEMBER)
+  joinedAt  DateTime    @default(now())
 
   user      User     @relation(fields: [userId], references: [id])
   channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)

@@ -15,6 +15,7 @@ interface AdminState {
   fetchInvites: () => Promise<void>;
   fetchAuditLog: (limit?: number, offset?: number) => Promise<void>;
   updateUserRole: (userId: number, role: 'ADMIN' | 'MEMBER' | 'GUEST') => Promise<void>;
+  transferOwnership: (userId: number) => Promise<void>;
   deactivateUser: (userId: number) => Promise<void>;
   reactivateUser: (userId: number) => Promise<void>;
   createInvite: (data: { role?: string; maxUses?: number | null; expiresAt?: string | null }) => Promise<void>;
@@ -69,6 +70,16 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       set({ users: get().users.map((u) => (u.id === userId ? updated : u)) });
     } catch (err) {
       set({ users: prev, error: err instanceof Error ? err.message : 'Failed to update role' });
+    }
+  },
+
+  transferOwnership: async (userId) => {
+    try {
+      await api.adminTransferOwnership(userId);
+      // Refresh users to reflect the role changes
+      await get().fetchUsers();
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'Failed to transfer ownership' });
     }
   },
 

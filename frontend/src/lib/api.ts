@@ -556,6 +556,7 @@ export function removeBookmark(messageId: number) {
 export interface ChannelMember {
   userId: number;
   channelId: number;
+  channelRole?: 'OWNER' | 'MODERATOR' | 'MEMBER';
   joinedAt: string;
   user: {
     id: number;
@@ -627,7 +628,7 @@ export interface AdminUser {
   email: string;
   name: string;
   avatar?: string | null;
-  role: 'ADMIN' | 'MEMBER' | 'GUEST';
+  role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'GUEST';
   status?: string;
   deactivatedAt?: string | null;
   createdAt: string;
@@ -659,7 +660,7 @@ export interface AdminInvite {
   id: number;
   code: string;
   createdBy: number;
-  role: 'ADMIN' | 'MEMBER' | 'GUEST';
+  role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'GUEST';
   maxUses: number | null;
   useCount: number;
   expiresAt: string | null;
@@ -669,6 +670,13 @@ export interface AdminInvite {
 
 export function adminGetUsers() {
   return request<AdminUser[]>('/admin/users');
+}
+
+export function adminTransferOwnership(userId: number) {
+  return request<{ message: string }>('/admin/transfer-ownership', {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
 }
 
 export function adminUpdateUserRole(userId: number, role: 'ADMIN' | 'MEMBER' | 'GUEST') {

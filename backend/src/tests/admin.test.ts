@@ -132,8 +132,8 @@ describe('Admin API', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ role: 'MEMBER' });
 
-      expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Cannot modify another admin');
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('Cannot modify a user with equal or higher role');
     });
 
     it('should reject invalid role', async () => {
@@ -186,8 +186,8 @@ describe('Admin API', () => {
         .post(`/admin/users/${memberId}/deactivate`)
         .set('Authorization', `Bearer ${adminToken}`);
 
-      expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Cannot deactivate another admin');
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('Cannot deactivate a user with equal or higher role');
     });
 
     it('should prevent deactivated user from logging in', async () => {

@@ -6,22 +6,44 @@ import { Avatar } from '@/components/ui/avatar';
 import { ConfirmDialog } from './ConfirmDialog';
 
 const ROLE_BADGE: Record<string, { label: string; className: string }> = {
+  OWNER: { label: 'Owner', className: 'bg-amber-100 text-amber-700' },
   ADMIN: { label: 'Admin', className: 'bg-purple-100 text-purple-700' },
   MEMBER: { label: 'Member', className: 'bg-blue-100 text-blue-700' },
   GUEST: { label: 'Guest', className: 'bg-gray-100 text-gray-600' },
 };
 
 export function AdminMembersTab() {
-  const { users, updateUserRole, deactivateUser, reactivateUser } = useAdminStore();
+  const { users, updateUserRole, deactivateUser, reactivateUser, transferOwnership } = useAdminStore();
   const currentUser = useAuthStore((s) => s.user);
   const [search, setSearch] = useState('');
-  const [confirmAction, setConfirmAction] = useState<{ type: 'deactivate' | 'reactivate'; userId: number; userName: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'deactivate' | 'reactivate' | 'transfer';
+    userId: number;
+    userName: string;
+  } | null>(null);
+
+  const isOwner = currentUser?.role === 'OWNER';
 
   const filtered = users.filter(
     (u) =>
       u.name.toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase())
   );
+
+  const getRoleOptions = (userRole: string) => {
+    if (isOwner) {
+      return ['ADMIN', 'MEMBER', 'GUEST'] as const;
+    }
+    return ['MEMBER', 'GUEST'] as const;
+  };
+
+  const canModify = (userRole: string, userId: number) => {
+    if (userId === currentUser?.id) return false;
+    if (userRole === 'OWNER') return false;
+    if (isOwner) return true;
+    if (userRole === 'ADMIN') return false;
+    return true;
+  };
 
   return (
     <div>
@@ -52,6 +74,7 @@ export function AdminMembersTab() {
               const isMe = user.id === currentUser?.id;
               const isDeactivated = !!user.deactivatedAt;
               const badge = ROLE_BADGE[user.role] || ROLE_BADGE.MEMBER;
+              const modifiable = canModify(user.role, user.id);
 
               return (
                 <tr key={user.id} className="border-b border-slack-border last:border-b-0 hover:bg-gray-50/50">
@@ -66,7 +89,7 @@ export function AdminMembersTab() {
                   </td>
                   <td className="px-4 py-2.5 text-slack-secondary">{user.email}</td>
                   <td className="px-4 py-2.5">
-                    {isMe || user.role === 'ADMIN' ? (
+                    {!modifiable ? (
                       <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.className}`}>
                         {badge.label}
                       </span>
@@ -76,8 +99,9 @@ export function AdminMembersTab() {
                         onChange={(e) => updateUserRole(user.id, e.target.value as 'ADMIN' | 'MEMBER' | 'GUEST')}
                         className="rounded border border-slack-border px-2 py-1 text-xs focus:border-slack-focus focus:outline-none"
                       >
-                        <option value="MEMBER">Member</option>
-                        <option value="GUEST">Guest</option>
+                        {getRoleOptions(user.role).map((r) => (
+                          <option key={r} value={r}>{ROLE_BADGE[r].label}</option>
+                        ))}
                       </select>
                     )}
                   </td>
@@ -89,23 +113,33 @@ export function AdminMembersTab() {
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    {!isMe && user.role !== 'ADMIN' && (
-                      isDeactivated ? (
+                    <div className="flex items-center justify-end gap-2">
+                      {isOwner && !isMe && user.role !== 'OWNER' && !isDeactivated && (
                         <button
-                          onClick={() => setConfirmAction({ type: 'reactivate', userId: user.id, userName: user.name })}
-                          className="text-xs font-medium text-green-600 hover:text-green-700"
+                          onClick={() => setConfirmAction({ type: 'transfer', userId: user.id, userName: user.name })}
+                          className="text-xs font-medium text-amber-600 hover:text-amber-700"
                         >
-                          Reactivate
+                          Transfer ownership
                         </button>
-                      ) : (
-                        <button
-                          onClick={() => setConfirmAction({ type: 'deactivate', userId: user.id, userName: user.name })}
-                          className="text-xs font-medium text-red-600 hover:text-red-700"
-                        >
-                          Deactivate
-                        </button>
-                      )
-                    )}
+                      )}
+                      {modifiable && (
+                        isDeactivated ? (
+                          <button
+                            onClick={() => setConfirmAction({ type: 'reactivate', userId: user.id, userName: user.name })}
+                            className="text-xs font-medium text-green-600 hover:text-green-700"
+                          >
+                            Reactivate
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmAction({ type: 'deactivate', userId: user.id, userName: user.name })}
+                            className="text-xs font-medium text-red-600 hover:text-red-700"
+                          >
+                            Deactivate
+                          </button>
+                        )
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -119,15 +153,27 @@ export function AdminMembersTab() {
 
       {confirmAction && (
         <ConfirmDialog
-          title={confirmAction.type === 'deactivate' ? 'Deactivate user' : 'Reactivate user'}
+          title={
+            confirmAction.type === 'transfer' ? 'Transfer workspace ownership'
+            : confirmAction.type === 'deactivate' ? 'Deactivate user'
+            : 'Reactivate user'
+          }
           message={
-            confirmAction.type === 'deactivate'
+            confirmAction.type === 'transfer'
+              ? `Are you sure you want to transfer workspace ownership to ${confirmAction.userName}? You will be demoted to Admin.`
+              : confirmAction.type === 'deactivate'
               ? `Are you sure you want to deactivate ${confirmAction.userName}? They will be logged out immediately and unable to sign in.`
               : `Are you sure you want to reactivate ${confirmAction.userName}? They will be able to sign in again.`
           }
-          confirmLabel={confirmAction.type === 'deactivate' ? 'Deactivate' : 'Reactivate'}
+          confirmLabel={
+            confirmAction.type === 'transfer' ? 'Transfer'
+            : confirmAction.type === 'deactivate' ? 'Deactivate'
+            : 'Reactivate'
+          }
           onConfirm={() => {
-            if (confirmAction.type === 'deactivate') {
+            if (confirmAction.type === 'transfer') {
+              transferOwnership(confirmAction.userId);
+            } else if (confirmAction.type === 'deactivate') {
               deactivateUser(confirmAction.userId);
             } else {
               reactivateUser(confirmAction.userId);

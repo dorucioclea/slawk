@@ -190,8 +190,8 @@ export function Sidebar() {
           </button>
         ))}
 
-        {/* Admin Nav Item - only visible to admins */}
-        {user?.role === 'ADMIN' && (
+        {/* Admin Nav Item - only visible to admins and owner */}
+        {(user?.role === 'ADMIN' || user?.role === 'OWNER') && (
           <button
             data-testid="nav-item-admin"
             onClick={() => {

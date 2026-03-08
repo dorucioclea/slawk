@@ -40,6 +40,9 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Role hierarchy: OWNER > ADMIN > MEMBER > GUEST
+const ROLE_RANK: Record<string, number> = { OWNER: 3, ADMIN: 2, MEMBER: 1, GUEST: 0 };
+
 // PATCH /admin/users/:id - Change user role
 const updateRoleSchema = z.object({
   role: z.enum(['ADMIN', 'MEMBER', 'GUEST']),
@@ -59,6 +62,7 @@ router.patch('/users/:id', async (req: AuthRequest, res: Response) => {
     }
 
     const { role } = updateRoleSchema.parse(req.body);
+    const actorRole = req.user!.role || 'MEMBER';
 
     const target = await prisma.user.findUnique({
       where: { id: userId },
@@ -70,8 +74,15 @@ router.patch('/users/:id', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    if (target.role === 'ADMIN') {
-      res.status(400).json({ error: 'Cannot modify another admin' });
+    // Cannot modify someone at or above your rank (unless you're OWNER)
+    if (actorRole !== 'OWNER' && ROLE_RANK[target.role] >= ROLE_RANK[actorRole]) {
+      res.status(403).json({ error: 'Cannot modify a user with equal or higher role' });
+      return;
+    }
+
+    // Only OWNER can promote to ADMIN
+    if (role === 'ADMIN' && actorRole !== 'OWNER') {
+      res.status(403).json({ error: 'Only the workspace owner can promote to admin' });
       return;
     }
 
@@ -125,8 +136,13 @@ router.post('/users/:id/deactivate', async (req: AuthRequest, res: Response) => 
       return;
     }
 
-    if (target.role === 'ADMIN') {
-      res.status(400).json({ error: 'Cannot deactivate another admin' });
+    const actorRole = req.user!.role || 'MEMBER';
+    if (target.role === 'OWNER') {
+      res.status(403).json({ error: 'Cannot deactivate the workspace owner' });
+      return;
+    }
+    if (actorRole !== 'OWNER' && ROLE_RANK[target.role] >= ROLE_RANK[actorRole]) {
+      res.status(403).json({ error: 'Cannot deactivate a user with equal or higher role' });
       return;
     }
 
@@ -603,6 +619,67 @@ router.get('/audit-log', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     logError('Admin audit log error', error);
     res.status(500).json({ error: 'Failed to get audit log' });
+  }
+});
+
+// POST /admin/transfer-ownership - Transfer workspace ownership (OWNER only)
+const transferOwnershipSchema = z.object({
+  userId: z.number().int().positive(),
+});
+
+router.post('/transfer-ownership', async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user!.role !== 'OWNER') {
+      res.status(403).json({ error: 'Only the workspace owner can transfer ownership' });
+      return;
+    }
+
+    const { userId } = transferOwnershipSchema.parse(req.body);
+    const ownerId = req.user!.userId;
+
+    if (userId === ownerId) {
+      res.status(400).json({ error: 'Cannot transfer ownership to yourself' });
+      return;
+    }
+
+    const target = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, deactivatedAt: true },
+    });
+
+    if (!target) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    if (target.deactivatedAt) {
+      res.status(400).json({ error: 'Cannot transfer ownership to a deactivated user' });
+      return;
+    }
+
+    // Atomic: demote current owner to ADMIN, promote target to OWNER
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: ownerId }, data: { role: 'ADMIN' } }),
+      prisma.user.update({ where: { id: userId }, data: { role: 'OWNER' } }),
+    ]);
+
+    writeAuditLog({
+      action: 'workspace.ownership_transferred',
+      actorId: ownerId,
+      targetType: 'user',
+      targetId: userId,
+      targetName: target.name,
+      details: `Workspace ownership transferred to ${target.name}`,
+    });
+
+    res.json({ message: 'Ownership transferred successfully' });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: error.issues });
+      return;
+    }
+    logError('Admin transfer ownership error', error);
+    res.status(500).json({ error: 'Failed to transfer ownership' });
   }
 });
 

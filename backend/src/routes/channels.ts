@@ -45,6 +45,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
         members: {
           create: {
             userId,
+            role: 'OWNER',
           },
         },
       },
@@ -312,9 +313,10 @@ router.get('/:id/members', authMiddleware, requirePublicChannelReadAccess, async
       orderBy: { joinedAt: 'asc' },
     });
 
-    // Enrich with real-time online status
+    // Enrich with real-time online status and channel role
     const enrichedMembers = members.map((m) => ({
       ...m,
+      channelRole: m.role,
       user: {
         ...m.user,
         isOnline: isUserOnline(m.user.id),
@@ -397,6 +399,79 @@ router.post('/:id/members', authMiddleware, requireChannelMembership, async (req
   } catch (error) {
     logError('Add member error', error);
     res.status(500).json({ error: 'Failed to add member' });
+  }
+});
+
+// PATCH /channels/:id/members/:userId - Change a member's channel role
+const updateMemberRoleSchema = z.object({
+  role: z.enum(['OWNER', 'MODERATOR', 'MEMBER']),
+});
+
+const CHANNEL_ROLE_RANK: Record<string, number> = { OWNER: 2, MODERATOR: 1, MEMBER: 0 };
+
+router.patch('/:id/members/:userId', authMiddleware, requireChannelMembership, async (req: AuthRequest, res: Response) => {
+  try {
+    const channelId = req.channelId!;
+    const targetUserId = parseIntParam(req.params.userId);
+    if (!targetUserId) {
+      res.status(400).json({ error: 'Invalid user ID' });
+      return;
+    }
+
+    const { role } = updateMemberRoleSchema.parse(req.body);
+    const actorId = req.user!.userId;
+
+    // Get actor's channel membership
+    const actorMember = await prisma.channelMember.findUnique({
+      where: { userId_channelId: { userId: actorId, channelId } },
+    });
+
+    if (!actorMember || actorMember.role !== 'OWNER') {
+      res.status(403).json({ error: 'Only the channel owner can change member roles' });
+      return;
+    }
+
+    if (actorId === targetUserId) {
+      res.status(400).json({ error: 'Cannot change your own role' });
+      return;
+    }
+
+    const targetMember = await prisma.channelMember.findUnique({
+      where: { userId_channelId: { userId: targetUserId, channelId } },
+    });
+
+    if (!targetMember) {
+      res.status(404).json({ error: 'User is not a member of this channel' });
+      return;
+    }
+
+    // If transferring channel ownership, demote self to MODERATOR
+    if (role === 'OWNER') {
+      await prisma.$transaction([
+        prisma.channelMember.update({
+          where: { userId_channelId: { userId: actorId, channelId } },
+          data: { role: 'MODERATOR' },
+        }),
+        prisma.channelMember.update({
+          where: { userId_channelId: { userId: targetUserId, channelId } },
+          data: { role: 'OWNER' },
+        }),
+      ]);
+    } else {
+      await prisma.channelMember.update({
+        where: { userId_channelId: { userId: targetUserId, channelId } },
+        data: { role },
+      });
+    }
+
+    res.json({ message: 'Member role updated' });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: error.issues });
+      return;
+    }
+    logError('Update member role error', error);
+    res.status(500).json({ error: 'Failed to update member role' });
   }
 });
 
