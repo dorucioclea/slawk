@@ -25,7 +25,7 @@ describe('Authentication', () => {
 
       expect(res.status).toBe(201);
       expect(res.body.user).toHaveProperty('id');
-      expect(res.body.user.email).toBe(testUser.email);
+      expect(res.body.user).not.toHaveProperty('email');
       expect(res.body.user.name).toBe(testUser.name);
       expect(res.body).toHaveProperty('token');
       expect(res.body.user).not.toHaveProperty('password');

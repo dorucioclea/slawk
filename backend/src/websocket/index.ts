@@ -94,6 +94,11 @@ export function initializeWebSocket(httpServer: HttpServer) {
       origin: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? false : 'http://localhost:5173'),
       methods: ['GET', 'POST'],
     },
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+    },
     maxHttpBufferSize: 16384,
     pingTimeout: 20000,
     pingInterval: 25000,
