@@ -229,7 +229,7 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
                         data-testid={`dm-message-${msg.id}`}
                         className={cn(
                           'group relative flex px-0 hover:bg-slack-hover',
-                          showAvatar ? 'pb-2 pt-4' : 'py-0.5',
+                          showAvatar ? 'pt-2 pb-0.5' : 'py-px',
                         )}
                         onMouseEnter={() => {
                           clearTimeout(hoverLeaveTimer.current);

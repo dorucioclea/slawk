@@ -62,6 +62,9 @@ const upload = multer({
       'audio/mpeg',
       'audio/mp4;codecs=opus',
       'audio/aac',
+      'video/mp4',
+      'video/webm',
+      'video/quicktime',
     ];
     if (allowedMimes.includes(file.mimetype)) {
       cb(null, true);

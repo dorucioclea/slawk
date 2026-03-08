@@ -146,7 +146,7 @@ export function MessageInput({ placeholder, onSend, sendError, clearSendError, c
           ref={editor.fileInputRef}
           type="file"
           className="hidden"
-          accept="image/*,audio/*,.pdf,.txt,.json,.zip"
+          accept="image/*,audio/*,video/*,.pdf,.txt,.json,.zip"
           onChange={editor.handleFileSelect}
         />
 

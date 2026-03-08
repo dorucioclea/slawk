@@ -76,7 +76,7 @@ export function Message({ message, showAvatar, isCompact, onOpenThread, readOnly
       className={cn(
         'group relative flex px-5',
         message.isPinned ? 'bg-slack-pinned hover:bg-slack-pinned' : 'hover:bg-slack-hover',
-        showAvatar ? 'pt-4 pb-2' : 'py-0.5'
+        showAvatar ? 'pt-2 pb-0.5' : 'py-px'
       )}
       onMouseEnter={onMouseEnter}
       onMouseLeave={() => onMouseLeave(() => setShowMoreMenu(false))}
@@ -189,6 +189,31 @@ export function Message({ message, showAvatar, isCompact, onOpenThread, readOnly
                       className="h-8"
                       src={getAuthFileUrl(file.url)}
                     />
+                  </div>
+                ) : file.mimetype.startsWith('video/') ? (
+                  <div>
+                    <video
+                      controls
+                      preload="metadata"
+                      className="max-h-[300px] max-w-[400px]"
+                      src={getAuthFileUrl(file.url)}
+                    />
+                    <div className="flex items-center gap-2 px-3 py-1.5 border-t border-slack-border">
+                      <span className="text-[13px] text-slack-link truncate max-w-[200px]">
+                        {file.originalName}
+                      </span>
+                      <span className="text-[11px] text-slack-disabled flex-shrink-0">
+                        {formatFileSize(file.size)}
+                      </span>
+                      <a
+                        href={getAuthFileUrl(`/files/${file.id}/download`, { download: true })}
+                        download={file.originalName.replace(/[/\\:\0]/g, '_')} rel="noopener"
+                        className="ml-auto flex-shrink-0 text-slack-disabled hover:text-slack-primary"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Download className="h-4 w-4" />
+                      </a>
+                    </div>
                   </div>
                 ) : file.mimetype.startsWith('image/') ? (
                   <div>

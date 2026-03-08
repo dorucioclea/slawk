@@ -62,6 +62,12 @@ router.post('/:id/reply', authMiddleware, requireMessageAccess, async (req: Auth
       });
     });
 
+    // Broadcast to channel so other users see the thread count update
+    const io = getIO();
+    if (io && reply) {
+      io.to(`channel:${parentMessage.channelId}`).emit('message:new', { ...reply, threadId: parentId });
+    }
+
     res.status(201).json(reply);
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -180,6 +180,9 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     if (message.channelId === get().loadedChannelId) {
       // If this is a reply, update the parent message's threadCount and threadParticipants
       if (msg.threadId) {
+        const currentUserId = getUserId();
+        // Skip for own replies — already updated via onReplyCountChange
+        if (msg.userId === currentUserId) return;
         set((state) => ({
           messages: state.messages.map((m) => {
             if (m.id !== msg.threadId) return m;

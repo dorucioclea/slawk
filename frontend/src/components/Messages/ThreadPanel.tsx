@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { SendHorizontal } from 'lucide-react';
+import { SendHorizontal, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Avatar } from '@/components/ui/avatar';
-import { getThread, replyToMessage, getDMThread, replyToDM, getAuthFileUrl, type ApiDirectMessage } from '@/lib/api';
+import { getThread, replyToMessage, getDMThread, replyToDM, getAuthFileUrl, deleteMessage, type ApiDirectMessage } from '@/lib/api';
+import { useAuthStore } from '@/stores/useAuthStore';
 import { cn } from '@/lib/utils';
 import { getSocket } from '@/lib/socket';
 import { serializeDelta } from '@/lib/serializeDelta';
@@ -86,23 +87,34 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange, variant = 
     };
   }, [messageId, isDM]);
 
-  // Listen for real-time DM thread replies via WebSocket
+  // Listen for real-time thread replies via WebSocket
   useEffect(() => {
-    if (!isDM) return;
     const socket = getSocket();
     if (!socket) return;
 
-    const handleDMReply = (reply: ApiDirectMessage & { threadId: number }) => {
-      if (reply.threadId !== messageId) return;
-      const normalized = normalizeMessage(reply);
-      setReplies((prev) => {
-        if (prev.some((r) => r.id === normalized.id)) return prev;
-        return [...prev, normalized];
-      });
-    };
-
-    socket.on('dm:reply', handleDMReply);
-    return () => { socket.off('dm:reply', handleDMReply); };
+    if (isDM) {
+      const handleDMReply = (reply: ApiDirectMessage & { threadId: number }) => {
+        if (reply.threadId !== messageId) return;
+        const normalized = normalizeMessage(reply);
+        setReplies((prev) => {
+          if (prev.some((r) => r.id === normalized.id)) return prev;
+          return [...prev, normalized];
+        });
+      };
+      socket.on('dm:reply', handleDMReply);
+      return () => { socket.off('dm:reply', handleDMReply); };
+    } else {
+      const handleNewMessage = (msg: any) => {
+        if (msg.threadId !== messageId) return;
+        const normalized = normalizeMessage(msg);
+        setReplies((prev) => {
+          if (prev.some((r) => r.id === normalized.id)) return prev;
+          return [...prev, normalized];
+        });
+      };
+      socket.on('message:new', handleNewMessage);
+      return () => { socket.off('message:new', handleNewMessage); };
+    }
   }, [messageId, isDM]);
 
   useEffect(() => {
@@ -223,8 +235,11 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange, variant = 
               </div>
             )}
 
-            {replies.map((reply) => (
-              <div key={reply.id} className="mb-3">
+            {replies.map((reply) => {
+              const currentUser = useAuthStore.getState().user;
+              const isOwn = currentUser?.id === reply.user.id;
+              return (
+              <div key={reply.id} className="group mb-3">
                 <div className="flex items-start gap-2">
                   <Avatar
                     src={reply.user.avatar ?? undefined}
@@ -241,6 +256,21 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange, variant = 
                       <span className="text-[11px] text-slack-secondary">
                         {format(reply.createdAt, 'h:mm a')}
                       </span>
+                      {isOwn && !readOnly && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await deleteMessage(reply.id);
+                              setReplies((prev) => prev.filter((r) => r.id !== reply.id));
+                              onReplyCountChange?.(messageId, replies.length - 1);
+                            } catch { /* ignore */ }
+                          }}
+                          className="ml-auto opacity-0 group-hover:opacity-100 text-slack-secondary hover:text-slack-error transition-opacity"
+                          title="Delete reply"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                     <div className="text-[14px] text-slack-primary leading-[20px] whitespace-pre-wrap break-words">
                       {renderMessageContent(reply.content)}
@@ -249,7 +279,8 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange, variant = 
                   </div>
                 </div>
               </div>
-            ))}
+            );
+            })}
             <div ref={repliesEndRef} />
           </>
         )}
@@ -300,7 +331,7 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange, variant = 
             ref={editor.fileInputRef}
             type="file"
             className="hidden"
-            accept="image/*,.pdf,.txt,.json,.zip"
+            accept="image/*,audio/*,video/*,.pdf,.txt,.json,.zip"
             onChange={editor.handleFileSelect}
           />
 
