@@ -80,8 +80,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({
           user: {
             id: payload.userId,
-            email: payload.email,
-            name: payload.email.split('@')[0],
+            email: payload.email ?? '',
+            name: payload.email?.split('@')[0] ?? 'User',
           },
           isAuthenticated: true,
           isHydrating: true,
