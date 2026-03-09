@@ -13,6 +13,7 @@ import {
   wsChannelIdSchema,
   wsUserIdSchema,
 } from '../middleware/authorize.js';
+// Huddle schemas imported by huddles.ts directly
 import { USER_SELECT_BASIC, MESSAGE_INCLUDE_WITH_FILES, DM_INCLUDE_USERS } from '../db/selects.js';
 import { logError } from '../utils/logger.js';
 import { registerHuddleHandlers, handleHuddleDisconnect } from './huddles.js';
@@ -36,7 +37,10 @@ const RATE_LIMITS: Record<string, { max: number; windowMs: number }> = {
   'dm:typing:stop': { max: 60, windowMs: 60_000 },
   'join:channel': { max: 20, windowMs: 60_000 },
   'dm:join': { max: 20, windowMs: 60_000 },
-  'huddle:join': { max: 10, windowMs: 60_000 },
+  'huddle:invite': { max: 10, windowMs: 60_000 },
+  'huddle:invite:accept': { max: 10, windowMs: 60_000 },
+  'huddle:invite:decline': { max: 10, windowMs: 60_000 },
+  'huddle:invite:cancel': { max: 10, windowMs: 60_000 },
   'huddle:leave': { max: 10, windowMs: 60_000 },
   'huddle:mute': { max: 30, windowMs: 60_000 },
   'huddle:signal': { max: 200, windowMs: 60_000 },

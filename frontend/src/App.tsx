@@ -7,6 +7,8 @@ import { useDMStore } from '@/stores/useDMStore';
 import { useBookmarkStore } from '@/stores/useBookmarkStore';
 import { connectSocket, disconnectSocket, getSocket } from '@/lib/socket';
 import { useHuddleStore, setHuddleUserId } from '@/stores/useHuddleStore';
+import { HuddleBar } from '@/components/Huddle/HuddleBar';
+import { HuddleIncomingCall } from '@/components/Huddle/HuddleIncomingCall';
 import { AppLayout } from '@/components/Layout/AppLayout';
 import { LoginPage } from '@/components/Auth/LoginPage';
 import { RegisterPage } from '@/components/Auth/RegisterPage';
@@ -306,28 +308,32 @@ function AppShell() {
     socket.on('reaction:removed', handleReactionRemoved);
 
     // Huddle events
-    const handleHuddleState = (data: { channelId: number; participants: import('@/stores/useHuddleStore').HuddleParticipant[] }) =>
-      useHuddleStore.getState().onHuddleState(data);
-    const handleHuddleActive = (data: { channelId: number; participantCount: number; participants: import('@/stores/useHuddleStore').HuddleParticipant[] }) =>
-      useHuddleStore.getState().onHuddleActive(data);
-    const handleParticipantJoined = (data: { channelId: number; participant: import('@/stores/useHuddleStore').HuddleParticipant }) =>
-      useHuddleStore.getState().onParticipantJoined(data);
-    const handleParticipantLeft = (data: { channelId: number; userId: number }) =>
-      useHuddleStore.getState().onParticipantLeft(data);
-    const handleHuddleMuteChanged = (data: { channelId: number; userId: number; isMuted: boolean }) =>
-      useHuddleStore.getState().onMuteChanged(data);
-    const handleHuddleSignal = (data: { channelId: number; fromUserId: number; signal: { type: string; sdp?: string; candidate?: unknown } }) =>
+    const handleInviteSent = (data: { inviteId: string; toUserId: number }) =>
+      useHuddleStore.getState().onInviteSent(data);
+    const handleInviteReceived = (data: import('@/stores/useHuddleStore').IncomingInvite) =>
+      useHuddleStore.getState().onInviteReceived(data);
+    const handleInviteCancelled = (data: { inviteId: string; reason: string }) =>
+      useHuddleStore.getState().onInviteCancelled(data);
+    const handleHuddleConnected = (data: { huddleId: string; isInitiator: boolean; peer: { userId: number; name: string; avatar: string | null; isMuted: boolean } }) =>
+      useHuddleStore.getState().onHuddleConnected(data);
+    const handleHuddleSignal = (data: { huddleId: string; fromUserId: number; signal: { type: string; sdp?: string; candidate?: unknown } }) =>
       useHuddleStore.getState().onSignal(data);
-    const handleHuddleEnded = (data: { channelId: number }) =>
+    const handleHuddleMuteChanged = (data: { huddleId: string; userId: number; isMuted: boolean }) =>
+      useHuddleStore.getState().onMuteChanged(data);
+    const handleHuddleEnded = (data: { huddleId: string }) =>
       useHuddleStore.getState().onHuddleEnded(data);
 
-    socket.on('huddle:state', handleHuddleState);
-    socket.on('huddle:active', handleHuddleActive);
-    socket.on('huddle:participant-joined', handleParticipantJoined);
-    socket.on('huddle:participant-left', handleParticipantLeft);
-    socket.on('huddle:mute-changed', handleHuddleMuteChanged);
+    const handleHuddleError = (data: { message: string }) =>
+      useHuddleStore.setState({ error: data.message });
+
+    socket.on('huddle:invite:sent', handleInviteSent);
+    socket.on('huddle:invite:received', handleInviteReceived);
+    socket.on('huddle:invite:cancelled', handleInviteCancelled);
+    socket.on('huddle:connected', handleHuddleConnected);
     socket.on('huddle:signal', handleHuddleSignal);
+    socket.on('huddle:mute-changed', handleHuddleMuteChanged);
     socket.on('huddle:ended', handleHuddleEnded);
+    socket.on('huddle:error', handleHuddleError);
 
     const handleDisconnect = () => {
       joinedChannelsRef.current.clear();
@@ -354,13 +360,14 @@ function AppShell() {
       socket.off('channel:unarchived', handleChannelUnarchived);
       socket.off('reaction:added', handleReactionAdded);
       socket.off('reaction:removed', handleReactionRemoved);
-      socket.off('huddle:state', handleHuddleState);
-      socket.off('huddle:active', handleHuddleActive);
-      socket.off('huddle:participant-joined', handleParticipantJoined);
-      socket.off('huddle:participant-left', handleParticipantLeft);
-      socket.off('huddle:mute-changed', handleHuddleMuteChanged);
+      socket.off('huddle:invite:sent', handleInviteSent);
+      socket.off('huddle:invite:received', handleInviteReceived);
+      socket.off('huddle:invite:cancelled', handleInviteCancelled);
+      socket.off('huddle:connected', handleHuddleConnected);
       socket.off('huddle:signal', handleHuddleSignal);
+      socket.off('huddle:mute-changed', handleHuddleMuteChanged);
       socket.off('huddle:ended', handleHuddleEnded);
+      socket.off('huddle:error', handleHuddleError);
       socket.off('disconnect', handleDisconnect);
       useHuddleStore.getState().cleanup();
       disconnectSocket();
@@ -395,6 +402,8 @@ function AppShell() {
     <>
       <Outlet />
       <AppLayout />
+      <HuddleBar />
+      <HuddleIncomingCall />
     </>
   );
 }

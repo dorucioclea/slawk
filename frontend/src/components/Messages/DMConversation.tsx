@@ -28,7 +28,7 @@ import { HeaderNotifications } from './HeaderNotifications';
 import { HeaderTabs } from './HeaderTabs';
 import { PanelHeader } from './PanelHeader';
 import { HuddleButton } from '@/components/Huddle/HuddleButton';
-import { HuddleInvite } from '@/components/Huddle/HuddleInvite';
+import { HuddleSystemMessage } from '@/components/Huddle/HuddleInvite';
 import { renderMessageContent } from '@/lib/renderMessageContent';
 import { markDMUnread } from '@/lib/api';
 import { useMobileStore } from '@/stores/useMobileStore';
@@ -210,7 +210,7 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
 
           {/* Right Section */}
           <div className="flex items-center gap-2">
-            <HuddleButton channelId={-userId} />
+            <HuddleButton userId={userId} />
             <div className="hidden sm:block">
               <HeaderNotifications testIdPrefix="dm" />
             </div>
@@ -363,8 +363,8 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
                                 </button>
                               </div>
                             </div>
-                          ) : msg.content === 'Started a huddle. Join to talk!' ? (
-                              <HuddleInvite channelId={-userId} fromUserId={msg.fromUserId} />
+                          ) : msg.content.startsWith('[huddle:') || msg.content === 'Started a huddle. Join to talk!' ? (
+                              <HuddleSystemMessage content={msg.content} fromUserId={msg.fromUserId} />
                           ) : (
                             <div className="whitespace-pre-wrap break-words text-[15px] leading-[22px] text-slack-primary">
                               {renderMessageContent(msg.content)}

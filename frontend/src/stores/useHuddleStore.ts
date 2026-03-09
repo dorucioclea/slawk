@@ -1,17 +1,19 @@
 import { create } from 'zustand';
 import { getSocket } from '@/lib/socket';
 
-export interface HuddleParticipant {
+export interface IncomingInvite {
+  inviteId: string;
+  fromUserId: number;
+  fromName: string;
+  fromAvatar: string | null;
+  expiresAt: string;
+}
+
+interface PeerInfo {
   userId: number;
   name: string;
   avatar: string | null;
   isMuted: boolean;
-  joinedAt: string;
-}
-
-interface PeerState {
-  pc: RTCPeerConnection;
-  audioElement: HTMLAudioElement | null;
 }
 
 const ICE_SERVERS: RTCIceServer[] = [
@@ -21,87 +23,152 @@ const ICE_SERVERS: RTCIceServer[] = [
 
 interface HuddleState {
   userId: number | null;
-  activeHuddles: Record<number, HuddleParticipant[]>;
 
-  // Current user's active huddle
-  currentChannelId: number | null;
+  // Invite state
+  outgoingInvite: { inviteId: string; toUserId: number } | null;
+  incomingInvites: IncomingInvite[];
+
+  // Active huddle state
+  huddleId: string | null;
+  peer: PeerInfo | null;
   isMuted: boolean;
-  isJoining: boolean;
+  isConnecting: boolean;
   localStream: MediaStream | null;
-  peers: Map<number, PeerState>;
+  peerConnection: RTCPeerConnection | null;
+  audioElement: HTMLAudioElement | null;
   error: string | null;
 
   // Actions
-  joinHuddle: (channelId: number) => Promise<void>;
+  sendInvite: (toUserId: number) => Promise<void>;
+  cancelInvite: () => void;
+  acceptInvite: (inviteId: string) => Promise<void>;
+  declineInvite: (inviteId: string) => void;
   leaveHuddle: () => void;
   toggleMute: () => void;
 
   // Socket event handlers
-  onHuddleState: (data: { channelId: number; participants: HuddleParticipant[] }) => void;
-  onHuddleActive: (data: { channelId: number; participantCount: number; participants: HuddleParticipant[] }) => void;
-  onParticipantJoined: (data: { channelId: number; participant: HuddleParticipant }) => void;
-  onParticipantLeft: (data: { channelId: number; userId: number }) => void;
-  onMuteChanged: (data: { channelId: number; userId: number; isMuted: boolean }) => void;
-  onSignal: (data: { channelId: number; fromUserId: number; signal: { type: string; sdp?: string; candidate?: unknown } }) => void;
-  onHuddleEnded: (data: { channelId: number }) => void;
+  onInviteSent: (data: { inviteId: string; toUserId: number }) => void;
+  onInviteReceived: (data: IncomingInvite) => void;
+  onInviteCancelled: (data: { inviteId: string; reason: string }) => void;
+  onHuddleConnected: (data: { huddleId: string; isInitiator: boolean; peer: PeerInfo }) => void;
+  onSignal: (data: { huddleId: string; fromUserId: number; signal: { type: string; sdp?: string; candidate?: unknown } }) => void;
+  onMuteChanged: (data: { huddleId: string; userId: number; isMuted: boolean }) => void;
+  onHuddleEnded: (data: { huddleId: string }) => void;
   cleanup: () => void;
 }
 
 export const useHuddleStore = create<HuddleState>((set, get) => ({
   userId: null,
-  activeHuddles: {},
-  currentChannelId: null,
+  outgoingInvite: null,
+  incomingInvites: [],
+  huddleId: null,
+  peer: null,
   isMuted: false,
-  isJoining: false,
+  isConnecting: false,
   localStream: null,
-  peers: new Map(),
+  peerConnection: null,
+  audioElement: null,
   error: null,
 
-  joinHuddle: async (channelId: number) => {
+  sendInvite: async (toUserId: number) => {
     const state = get();
-    if (state.isJoining) return;
+    if (state.huddleId) {
+      set({ error: 'Leave your current huddle first' });
+      return;
+    }
+    if (state.outgoingInvite) {
+      set({ error: 'Cancel your current invite first' });
+      return;
+    }
 
-    // Must leave current huddle first — don't silently switch
-    if (state.currentChannelId && state.currentChannelId !== channelId) {
+    set({ error: null });
+
+    // Acquire mic early so failure is surfaced before invite is sent
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      set({ localStream: stream });
+    } catch {
+      set({ error: 'Microphone access denied' });
+      return;
+    }
+
+    const socket = getSocket();
+    if (socket) {
+      socket.emit('huddle:invite', { toUserId });
+    }
+  },
+
+  cancelInvite: () => {
+    const { outgoingInvite, localStream } = get();
+    if (!outgoingInvite) return;
+
+    const socket = getSocket();
+    if (socket) {
+      socket.emit('huddle:invite:cancel', { inviteId: outgoingInvite.inviteId });
+    }
+
+    // Stop mic since we acquired it at invite time
+    if (localStream) {
+      localStream.getTracks().forEach((t) => t.stop());
+    }
+
+    set({ outgoingInvite: null, localStream: null });
+  },
+
+  acceptInvite: async (inviteId: string) => {
+    const state = get();
+    if (state.huddleId) {
       set({ error: 'Leave your current huddle first' });
       return;
     }
 
-    // Already in this huddle
-    if (state.currentChannelId === channelId) return;
+    set({ isConnecting: true, error: null });
 
-    set({ isJoining: true, error: null });
-
+    // Acquire mic
     try {
-      // Start with audio only — camera is requested on-demand when user clicks video button
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      set({ localStream: stream, currentChannelId: channelId, isJoining: false, isMuted: false });
-
-      const socket = getSocket();
-      if (socket) {
-        socket.emit('huddle:join', { channelId });
-      }
+      set({ localStream: stream });
     } catch {
-      set({ isJoining: false, error: 'Microphone access denied' });
+      set({ isConnecting: false, error: 'Microphone access denied' });
+      return;
     }
-  },
-
-  leaveHuddle: () => {
-    const { currentChannelId } = get();
-    if (!currentChannelId) return;
 
     const socket = getSocket();
     if (socket) {
-      socket.emit('huddle:leave', { channelId: currentChannelId });
+      socket.emit('huddle:invite:accept', { inviteId });
+    }
+
+    // Remove from incoming invites
+    set((s) => ({
+      incomingInvites: s.incomingInvites.filter((inv) => inv.inviteId !== inviteId),
+    }));
+  },
+
+  declineInvite: (inviteId: string) => {
+    const socket = getSocket();
+    if (socket) {
+      socket.emit('huddle:invite:decline', { inviteId });
+    }
+    set((s) => ({
+      incomingInvites: s.incomingInvites.filter((inv) => inv.inviteId !== inviteId),
+    }));
+  },
+
+  leaveHuddle: () => {
+    const { huddleId } = get();
+    if (!huddleId) return;
+
+    const socket = getSocket();
+    if (socket) {
+      socket.emit('huddle:leave', { huddleId });
     }
 
     get().cleanup();
   },
 
   toggleMute: () => {
-    const { isMuted, localStream, currentChannelId } = get();
-    if (!localStream || !currentChannelId) return;
+    const { isMuted, localStream, huddleId } = get();
+    if (!localStream || !huddleId) return;
 
     const newMuted = !isMuted;
     localStream.getAudioTracks().forEach((track) => {
@@ -112,101 +179,103 @@ export const useHuddleStore = create<HuddleState>((set, get) => ({
 
     const socket = getSocket();
     if (socket) {
-      socket.emit('huddle:mute', { channelId: currentChannelId, isMuted: newMuted });
+      socket.emit('huddle:mute', { huddleId, isMuted: newMuted });
     }
   },
 
-  onHuddleState: (data) => {
-    const { currentChannelId, localStream } = get();
-    if (data.channelId !== currentChannelId || !localStream) return;
+  // ── Socket event handlers ──
 
-    set((s) => ({
-      activeHuddles: { ...s.activeHuddles, [data.channelId]: data.participants },
-    }));
-
-    const myUserId = get().userId;
-    if (!myUserId) return;
-
-    for (const participant of data.participants) {
-      if (participant.userId !== myUserId) {
-        createPeerConnection(participant.userId, true);
-      }
-    }
+  onInviteSent: (data) => {
+    set({ outgoingInvite: { inviteId: data.inviteId, toUserId: data.toUserId } });
   },
 
-  onHuddleActive: (data) => {
+  onInviteReceived: (data) => {
     set((s) => ({
-      activeHuddles: { ...s.activeHuddles, [data.channelId]: data.participants },
+      incomingInvites: [...s.incomingInvites.filter((inv) => inv.inviteId !== data.inviteId), data],
     }));
   },
 
-  onParticipantJoined: (data) => {
-    set((s) => {
-      const existing = s.activeHuddles[data.channelId] || [];
-      return {
-        activeHuddles: {
-          ...s.activeHuddles,
-          [data.channelId]: [...existing.filter((p) => p.userId !== data.participant.userId), data.participant],
-        },
-      };
-    });
-  },
+  onInviteCancelled: (data) => {
+    const { outgoingInvite, localStream } = get();
 
-  onParticipantLeft: (data) => {
-    set((s) => {
-      const existing = s.activeHuddles[data.channelId] || [];
-      return {
-        activeHuddles: {
-          ...s.activeHuddles,
-          [data.channelId]: existing.filter((p) => p.userId !== data.userId),
-        },
-      };
-    });
-
-    const { peers } = get();
-    const peer = peers.get(data.userId);
-    if (peer) {
-      peer.pc.close();
-      if (peer.audioElement) {
-        peer.audioElement.pause();
-        peer.audioElement.srcObject = null;
+    // If it was our outgoing invite that got cancelled
+    if (outgoingInvite && (outgoingInvite.inviteId === data.inviteId || data.inviteId === 'none')) {
+      if (localStream) {
+        localStream.getTracks().forEach((t) => t.stop());
       }
-      const newPeers = new Map(peers);
-      newPeers.delete(data.userId);
-      set({ peers: newPeers });
+      set({ outgoingInvite: null, localStream: null });
+
+      let errorMsg: string | null = null;
+      if (data.reason === 'busy') errorMsg = 'They are in another huddle';
+      else if (data.reason === 'declined') errorMsg = 'Invite was declined';
+      else if (data.reason === 'timeout') errorMsg = 'Invite expired';
+
+      if (errorMsg) {
+        set({ error: errorMsg });
+        setTimeout(() => {
+          if (useHuddleStore.getState().error === errorMsg) {
+            useHuddleStore.setState({ error: null });
+          }
+        }, 5000);
+      }
+      return;
     }
+
+    // Remove from incoming invites
+    set((s) => ({
+      incomingInvites: s.incomingInvites.filter((inv) => inv.inviteId !== data.inviteId),
+    }));
   },
 
-  onMuteChanged: (data) => {
-    set((s) => {
-      const existing = s.activeHuddles[data.channelId] || [];
-      return {
-        activeHuddles: {
-          ...s.activeHuddles,
-          [data.channelId]: existing.map((p) =>
-            p.userId === data.userId ? { ...p, isMuted: data.isMuted } : p
-          ),
-        },
-      };
+  onHuddleConnected: (data) => {
+    const state = get();
+
+    // If we had an outgoing invite, clear it (we're now connected)
+    set({
+      huddleId: data.huddleId,
+      peer: data.peer,
+      outgoingInvite: null,
+      isConnecting: false,
+      isMuted: false,
+      error: null,
     });
+
+    // Get mic — the inviter should already have it from sendInvite, accepter from acceptInvite
+    const { localStream } = get();
+    if (!localStream) {
+      // Shouldn't happen but handle gracefully
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then((stream) => {
+          useHuddleStore.setState({ localStream: stream });
+          if (data.isInitiator) {
+            setupPeerConnection(data.huddleId, data.peer.userId, true);
+          }
+        })
+        .catch(() => {
+          // Mic failed — must leave
+          const socket = getSocket();
+          if (socket) socket.emit('huddle:leave', { huddleId: data.huddleId });
+          get().cleanup();
+          set({ error: 'Microphone access denied' });
+        });
+      return;
+    }
+
+    if (data.isInitiator) {
+      setupPeerConnection(data.huddleId, data.peer.userId, true);
+    }
+    // Non-initiator waits for the offer signal
   },
 
   onSignal: (data) => {
-    const { currentChannelId, peers } = get();
-    if (data.channelId !== currentChannelId) return;
+    const state = get();
+    if (data.huddleId !== state.huddleId) return;
 
-    const { fromUserId, signal } = data;
+    const { signal } = data;
 
     if (signal.type === 'offer') {
-      const existingPeer = peers.get(fromUserId);
-      if (existingPeer) {
-        existingPeer.pc.close();
-        if (existingPeer.audioElement) {
-          existingPeer.audioElement.pause();
-          existingPeer.audioElement.srcObject = null;
-        }
-      }
-      const pc = createPeerConnection(fromUserId, false);
+      // We're the non-initiator, set up peer connection and answer
+      const pc = setupPeerConnection(data.huddleId, data.fromUserId, false);
       if (!pc) return;
 
       const sdpDesc = new RTCSessionDescription({ type: 'offer', sdp: signal.sdp! });
@@ -217,75 +286,92 @@ export const useHuddleStore = create<HuddleState>((set, get) => ({
           const socket = getSocket();
           if (socket && pc.localDescription) {
             socket.emit('huddle:signal', {
-              channelId: currentChannelId,
-              toUserId: fromUserId,
+              huddleId: data.huddleId,
               signal: { type: 'answer', sdp: pc.localDescription.sdp },
             });
           }
         })
         .catch((err) => console.error('Huddle answer error:', err));
     } else if (signal.type === 'answer') {
-      const peer = peers.get(fromUserId);
-      if (peer) {
+      const { peerConnection } = get();
+      if (peerConnection) {
         const sdpDesc = new RTCSessionDescription({ type: 'answer', sdp: signal.sdp! });
-        peer.pc.setRemoteDescription(sdpDesc).catch((err) => console.error('Huddle set answer error:', err));
+        peerConnection.setRemoteDescription(sdpDesc)
+          .catch((err) => console.error('Huddle set answer error:', err));
       }
     } else if (signal.type === 'ice-candidate') {
-      const peer = peers.get(fromUserId);
-      if (peer && signal.candidate) {
-        peer.pc.addIceCandidate(new RTCIceCandidate(signal.candidate as RTCIceCandidateInit))
+      const { peerConnection } = get();
+      if (peerConnection && signal.candidate) {
+        peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate as RTCIceCandidateInit))
           .catch((err) => console.error('Huddle ICE error:', err));
       }
     }
   },
 
+  onMuteChanged: (data) => {
+    const state = get();
+    if (data.huddleId !== state.huddleId) return;
+
+    // Update peer's mute state
+    if (state.peer && data.userId === state.peer.userId) {
+      set({ peer: { ...state.peer, isMuted: data.isMuted } });
+    }
+    // Update own mute state if echoed back
+    if (data.userId === state.userId) {
+      set({ isMuted: data.isMuted });
+    }
+  },
+
   onHuddleEnded: (data) => {
-    const { currentChannelId } = get();
-
-    set((s) => {
-      const updated = { ...s.activeHuddles };
-      delete updated[data.channelId];
-      return { activeHuddles: updated };
-    });
-
-    if (data.channelId === currentChannelId) {
+    const { huddleId } = get();
+    if (data.huddleId === huddleId) {
       get().cleanup();
     }
   },
 
   cleanup: () => {
-    const { peers, localStream } = get();
+    const { peerConnection, audioElement, localStream } = get();
 
-    for (const [, peer] of peers) {
-      peer.pc.close();
-      if (peer.audioElement) {
-        peer.audioElement.pause();
-        peer.audioElement.srcObject = null;
-      }
+    if (peerConnection) {
+      peerConnection.close();
     }
-
+    if (audioElement) {
+      audioElement.pause();
+      audioElement.srcObject = null;
+    }
     if (localStream) {
       localStream.getTracks().forEach((t) => t.stop());
     }
 
     set({
-      currentChannelId: null,
+      huddleId: null,
+      peer: null,
       isMuted: false,
+      isConnecting: false,
       localStream: null,
-      peers: new Map(),
+      peerConnection: null,
+      audioElement: null,
+      outgoingInvite: null,
       error: null,
     });
   },
 }));
 
-function createPeerConnection(remoteUserId: number, isInitiator: boolean): RTCPeerConnection | null {
+// ── WebRTC Peer Connection Setup ─────────────────────────────────────
+
+function setupPeerConnection(huddleId: string, remoteUserId: number, isInitiator: boolean): RTCPeerConnection | null {
   const state = useHuddleStore.getState();
-  const { localStream, currentChannelId, peers } = state;
-  if (!localStream || !currentChannelId) return null;
+  const { localStream } = state;
+  if (!localStream) return null;
+
+  // Close existing peer connection if any
+  if (state.peerConnection) {
+    state.peerConnection.close();
+  }
 
   const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-  // Add audio track
+  // Add audio tracks
   localStream.getAudioTracks().forEach((track) => {
     pc.addTrack(track, localStream);
   });
@@ -295,9 +381,8 @@ function createPeerConnection(remoteUserId: number, isInitiator: boolean): RTCPe
       const socket = getSocket();
       if (socket) {
         socket.emit('huddle:signal', {
-          channelId: currentChannelId,
-          toUserId: remoteUserId,
-          signal: { type: 'ice-candidate', candidate: event.candidate.toJSON() },
+          huddleId,
+          signal: { type: 'ice-candidate' as const, candidate: event.candidate.toJSON() },
         });
       }
     }
@@ -305,23 +390,20 @@ function createPeerConnection(remoteUserId: number, isInitiator: boolean): RTCPe
 
   pc.ontrack = (event) => {
     const stream = event.streams[0];
-
     const audio = document.createElement('audio');
     audio.srcObject = stream;
     audio.autoplay = true;
     audio.play().catch(() => {});
-
-    const currentPeers = new Map(useHuddleStore.getState().peers);
-    const existing = currentPeers.get(remoteUserId);
-    if (existing) {
-      existing.audioElement = audio;
-    }
-    useHuddleStore.setState({ peers: currentPeers });
+    useHuddleStore.setState({ audioElement: audio });
   };
 
-  const newPeers = new Map(peers);
-  newPeers.set(remoteUserId, { pc, audioElement: null });
-  useHuddleStore.setState({ peers: newPeers });
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+      console.warn('Huddle peer connection state:', pc.connectionState);
+    }
+  };
+
+  useHuddleStore.setState({ peerConnection: pc });
 
   if (isInitiator) {
     pc.createOffer()
@@ -330,9 +412,8 @@ function createPeerConnection(remoteUserId: number, isInitiator: boolean): RTCPe
         const socket = getSocket();
         if (socket && pc.localDescription) {
           socket.emit('huddle:signal', {
-            channelId: currentChannelId,
-            toUserId: remoteUserId,
-            signal: { type: 'offer', sdp: pc.localDescription.sdp },
+            huddleId,
+            signal: { type: 'offer' as const, sdp: pc.localDescription.sdp },
           });
         }
       })
