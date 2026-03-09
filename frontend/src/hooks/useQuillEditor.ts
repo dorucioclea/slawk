@@ -100,12 +100,23 @@ export function useQuillEditor({
             },
             arrowUp: {
               key: 'ArrowUp',
-              handler: () => {
+              handler: (range: any) => {
                 if (mentionActiveRef.current) {
                   setMentionSelectedIndex((prev) =>
                     prev > 0 ? prev - 1 : mentionUsersRef.current.length - 1
                   );
                   return false;
+                }
+                // Escape code block at start of document
+                const q = quillRef.current;
+                if (q && range.length === 0) {
+                  const fmt = q.getFormat(range.index);
+                  if (fmt['code-block'] && !q.getText(0, range.index).includes('\n')) {
+                    q.insertText(0, '\n');
+                    q.formatLine(0, 1, 'code-block', false);
+                    q.setSelection(0);
+                    return false;
+                  }
                 }
                 return true;
               },
@@ -130,6 +141,21 @@ export function useQuillEditor({
                     q.setSelection(len);
                     return false;
                   }
+                }
+                return true;
+              },
+            },
+            escapeCodeBlockLeft: {
+              key: 'ArrowLeft',
+              handler: (range: any) => {
+                const q = quillRef.current;
+                if (!q || range.length !== 0 || range.index !== 0) return true;
+                const fmt = q.getFormat(0);
+                if (fmt['code-block']) {
+                  q.insertText(0, '\n');
+                  q.formatLine(0, 1, 'code-block', false);
+                  q.setSelection(0);
+                  return false;
                 }
                 return true;
               },
