@@ -56,8 +56,8 @@ export function MessageList({ channelId, onOpenThread, readOnly }: MessageListPr
   // Clear stale refs and fetch messages when channel changes
   useEffect(() => {
     messageRefs.current = new Map();
-    fetchMessages(channelId);
-  }, [channelId, fetchMessages]);
+    fetchMessages(channelId, scrollToMessageId ?? undefined);
+  }, [channelId, fetchMessages, scrollToMessageId]);
 
   // After messages load, persist the read state to the backend so the
   // unread badge does not reappear on page reload.

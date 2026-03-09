@@ -6,6 +6,7 @@ import { getSocket } from '@/lib/socket';
 import { Button } from '@/components/ui/button';
 import { ProfileModal } from '@/components/ProfileModal';
 import { PanelHeader } from './PanelHeader';
+import { useChannelStore } from '@/stores/useChannelStore';
 
 interface MembersPanelProps {
   channelId: number;
@@ -25,6 +26,8 @@ export function MembersPanel({ channelId, onClose }: MembersPanelProps) {
       .then((data) => {
         setMembers(data);
         setLoadError(null);
+        // Sync badge count with actual member list
+        useChannelStore.getState().updateMemberCount(channelId, data.length);
       })
       .catch(() => setLoadError('Failed to load members.'))
       .finally(() => setIsLoading(false));

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FileText, Download, Menu } from 'lucide-react';
 import { format } from 'date-fns';
-import { getUserFiles, getAuthFileUrl, refreshDownloadToken, type ApiFileWithUser } from '@/lib/api';
+import { getUserFiles, getAuthFileUrl, getFileUrl, refreshDownloadToken, type ApiFileWithUser } from '@/lib/api';
 import { formatBytes, FileIcon } from '@/lib/fileUtils';
 import { useMobileStore } from '@/stores/useMobileStore';
 
@@ -52,9 +52,9 @@ export function FilesPage() {
             {files.map((file) => (
               <div key={file.id} className="flex items-start gap-3 rounded-lg p-3 hover:bg-slack-hover">
                 {file.mimetype.startsWith('image/') ? (
-                  <a href={getAuthFileUrl(file.url)} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+                  <a href={getFileUrl(file.id)} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
                     <img
-                      src={getAuthFileUrl(file.url)}
+                      src={getFileUrl(file.id)}
                       alt={file.originalName}
                       className="h-10 w-10 rounded object-cover"
                     />
@@ -66,7 +66,7 @@ export function FilesPage() {
                 )}
                 <div className="flex-1 min-w-0">
                   <a
-                    href={getAuthFileUrl(file.url)}
+                    href={getFileUrl(file.id)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block text-[14px] font-medium text-slack-link hover:underline truncate"

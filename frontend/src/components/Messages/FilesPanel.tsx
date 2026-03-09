@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FileText, Download } from 'lucide-react';
 import { format } from 'date-fns';
-import { getChannelFiles, getUserFiles, getAuthFileUrl, refreshDownloadToken, type ApiFileWithUser } from '@/lib/api';
+import { getChannelFiles, getUserFiles, getAuthFileUrl, getFileUrl, refreshDownloadToken, type ApiFileWithUser } from '@/lib/api';
 import { ImageLightbox } from './ImageLightbox';
 import { PanelHeader } from './PanelHeader';
 import { formatBytes, FileIcon } from '@/lib/fileUtils';
@@ -53,11 +53,11 @@ export function FilesPanel({ channelId, onClose, title }: FilesPanelProps) {
             <div key={file.id} className="border-b border-slack-border-light px-4 py-3">
               {file.mimetype.startsWith('image/') ? (
                 <button
-                  onClick={() => { setLightboxSrc(getAuthFileUrl(file.url)); setLightboxAlt(file.originalName); }}
+                  onClick={() => { setLightboxSrc(getFileUrl(file.id)); setLightboxAlt(file.originalName); }}
                   className="block mb-2 w-full cursor-zoom-in focus:outline-none"
                 >
                   <img
-                    src={getAuthFileUrl(file.url)}
+                    src={getFileUrl(file.id)}
                     alt={file.originalName}
                     className="w-full max-h-[140px] rounded object-cover"
                   />
@@ -70,14 +70,14 @@ export function FilesPanel({ channelId, onClose, title }: FilesPanelProps) {
                 <div className="flex-1 min-w-0">
                   {file.mimetype.startsWith('image/') ? (
                     <button
-                      onClick={() => { setLightboxSrc(getAuthFileUrl(file.url)); setLightboxAlt(file.originalName); }}
+                      onClick={() => { setLightboxSrc(getFileUrl(file.id)); setLightboxAlt(file.originalName); }}
                       className="block text-[13px] font-medium text-slack-link hover:underline truncate text-left"
                     >
                       {file.originalName}
                     </button>
                   ) : (
                     <a
-                      href={getAuthFileUrl(file.url)}
+                      href={getFileUrl(file.id)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="block text-[13px] font-medium text-slack-link hover:underline truncate"

@@ -18,6 +18,15 @@ import { useQuillEditor } from '@/hooks/useQuillEditor';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { ErrorBanner, SuccessBanner } from '@/components/ui/ErrorBanner';
 
+// Per-channel/DM draft storage (session-only, survives channel switches)
+const drafts = new Map<string, any>();
+
+function getDraftKey(channelId?: number, dmParticipantIds?: number[]): string {
+  if (channelId) return `ch:${channelId}`;
+  if (dmParticipantIds) return `dm:${dmParticipantIds.sort().join(',')}`;
+  return '';
+}
+
 interface MessageInputProps {
   placeholder: string;
   onSend: (content: string, fileIds?: number[]) => Promise<void>;
@@ -57,8 +66,11 @@ export function MessageInput({ placeholder, onSend, sendError, clearSendError, c
     const content = text || '';
     const fileIds = editor.pendingFiles.map((f) => f.id);
     editor.clearEditor();
+    // Clear saved draft on send
+    const key = getDraftKey(channelId, dmParticipantIds);
+    if (key) drafts.delete(key);
     await onSend(content, fileIds.length > 0 ? fileIds : undefined);
-  }, [onSend, editor]);
+  }, [onSend, editor, channelId, dmParticipantIds]);
 
   handleSendRef.current = handleSend;
 
@@ -99,12 +111,35 @@ export function MessageInput({ placeholder, onSend, sendError, clearSendError, c
   const closeScheduleMenu = useCallback(() => setShowScheduleMenu(false), []);
   useClickOutside(scheduleMenuRef, closeScheduleMenu, showScheduleMenu);
 
-  // Clear editor content when switching channels
+  // Save draft and restore when switching channels/DMs
+  const prevKeyRef = useRef<string>('');
   useEffect(() => {
-    if (channelId !== undefined) {
-      editor.clearEditor();
+    const key = getDraftKey(channelId, dmParticipantIds);
+    const quill = editor.quillRef.current;
+
+    // Save draft from previous channel/DM
+    if (prevKeyRef.current && quill) {
+      const delta = quill.getContents();
+      const text = quill.getText().trim();
+      if (text) {
+        drafts.set(prevKeyRef.current, delta);
+      } else {
+        drafts.delete(prevKeyRef.current);
+      }
     }
-  }, [channelId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Clear and restore draft for new channel/DM
+    editor.clearEditor();
+    if (key && quill) {
+      const savedDraft = drafts.get(key);
+      if (savedDraft) {
+        quill.setContents(savedDraft);
+        editor.setCanSend(true);
+      }
+    }
+
+    prevKeyRef.current = key;
+  }, [channelId, dmParticipantIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCustomSchedule = () => {
     setShowScheduleMenu(false);

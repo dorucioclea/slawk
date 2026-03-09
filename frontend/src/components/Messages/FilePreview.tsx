@@ -1,5 +1,5 @@
 import { FileIcon, X } from 'lucide-react';
-import { getAuthFileUrl } from '@/lib/api';
+import { getFileUrl } from '@/lib/api';
 import type { ApiFile } from '@/lib/api';
 
 interface FilePreviewProps {
@@ -22,7 +22,7 @@ export function FilePreview({ files, onRemove }: FilePreviewProps) {
         >
           {file.mimetype.startsWith('image/') ? (
             <img
-              src={getAuthFileUrl(file.url)}
+              src={getFileUrl(file.id)}
               alt={file.originalName}
               className="h-10 w-10 rounded object-cover"
             />

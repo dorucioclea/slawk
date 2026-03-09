@@ -55,7 +55,7 @@ interface DMState {
   isSending: boolean;
   sendError: string | null;
 
-  fetchConversation: (userId: number) => Promise<void>;
+  fetchConversation: (userId: number, around?: number) => Promise<void>;
   sendMessage: (userId: number, content: string) => Promise<void>;
   editMessage: (messageId: number, content: string, userId: number) => Promise<void>;
   deleteMessage: (messageId: number, userId: number) => Promise<void>;
@@ -80,14 +80,14 @@ export const useDMStore = create<DMState>((set, get) => ({
   isSending: false,
   sendError: null,
 
-  fetchConversation: async (userId: number) => {
+  fetchConversation: async (userId: number, around?: number) => {
     set({ isLoading: true, loadError: null, loadingUserId: userId });
     try {
-      const data = await getConversation(userId);
+      const data = await getConversation(userId, undefined, around);
       // Discard stale response if user already switched to another conversation
       if (get().loadingUserId !== userId) return;
       const msgs = data.messages.map(transformDM);
-      msgs.reverse(); // API returns DESC, we want ASC
+      if (!around) msgs.reverse(); // API returns DESC, we want ASC (around returns chronological)
       set((state) => ({
         messages: { ...state.messages, [userId]: msgs },
         isLoading: false,

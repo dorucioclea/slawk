@@ -155,45 +155,84 @@ router.get('/:userId', authMiddleware, async (req: AuthRequest, res: Response) =
 
     // Get messages between the two users
     const { limit, cursor } = parsePagination(req);
+    const aroundRaw = req.query.around ? parseInt(req.query.around as string) : undefined;
+    const around = aroundRaw !== undefined && !isNaN(aroundRaw) && aroundRaw > 0 ? aroundRaw : undefined;
 
-    const messages = await prisma.directMessage.findMany({
-      where: {
-        OR: [
-          { fromUserId: currentUserId, toUserId: otherUserId },
-          { fromUserId: otherUserId, toUserId: currentUserId },
-        ],
-        deletedAt: null,
-        threadId: null, // Exclude thread replies from main conversation
-      },
-      include: {
-        ...DM_INCLUDE_USERS,
-        _count: { select: { replies: true } },
-        replies: {
-          select: {
-            fromUser: { select: { id: true, name: true, avatar: true } },
-          },
-          distinct: ['fromUserId'],
-          take: 5,
+    const dmWhere = {
+      OR: [
+        { fromUserId: currentUserId, toUserId: otherUserId },
+        { fromUserId: otherUserId, toUserId: currentUserId },
+      ],
+      deletedAt: null,
+      threadId: null, // Exclude thread replies from main conversation
+    };
+
+    const dmInclude = {
+      ...DM_INCLUDE_USERS,
+      _count: { select: { replies: true } },
+      replies: {
+        select: {
+          fromUser: { select: { id: true, name: true, avatar: true } },
         },
+        distinct: ['fromUserId' as const],
+        take: 5,
       },
-      orderBy: { createdAt: 'desc' },
-      take: limit + 1,
-      ...(cursor && {
-        cursor: { id: cursor },
-        skip: 1,
-      }),
-    });
+    };
 
-    const { results: resultMessages, nextCursor, hasMore } = paginateResults(messages, limit);
+    const enrichDMMessages = (msgs: any[]) =>
+      msgs.map((msg) => {
+        const { replies, ...rest } = msg;
+        const threadParticipants = replies
+          ? replies.map((r: { fromUser: { id: number; name: string; avatar: string | null } }) => r.fromUser)
+          : [];
+        return { ...rest, threadParticipants };
+      });
 
-    // Extract unique thread participants from replies
-    const enrichedMessages = resultMessages.map((msg) => {
-      const { replies, ...rest } = msg;
-      const threadParticipants = replies
-        ? replies.map((r: { fromUser: { id: number; name: string; avatar: string | null } }) => r.fromUser)
-        : [];
-      return { ...rest, threadParticipants };
-    });
+    let enrichedMessages: any[];
+    let nextCursor: number | undefined;
+    let hasMore: boolean;
+
+    if (around) {
+      const half = Math.floor(limit / 2);
+      const [before, target, after] = await Promise.all([
+        prisma.directMessage.findMany({
+          where: { ...dmWhere, id: { lt: around } },
+          include: dmInclude,
+          orderBy: { createdAt: 'desc' },
+          take: half,
+        }),
+        prisma.directMessage.findMany({
+          where: { ...dmWhere, id: around },
+          include: dmInclude,
+          take: 1,
+        }),
+        prisma.directMessage.findMany({
+          where: { ...dmWhere, id: { gt: around } },
+          include: dmInclude,
+          orderBy: { createdAt: 'asc' },
+          take: half,
+        }),
+      ]);
+      enrichedMessages = enrichDMMessages([...before.reverse(), ...target, ...after]);
+      nextCursor = undefined;
+      hasMore = false;
+    } else {
+      const messages = await prisma.directMessage.findMany({
+        where: dmWhere,
+        include: dmInclude,
+        orderBy: { createdAt: 'desc' },
+        take: limit + 1,
+        ...(cursor && {
+          cursor: { id: cursor },
+          skip: 1,
+        }),
+      });
+
+      const paginated = paginateResults(messages, limit);
+      enrichedMessages = enrichDMMessages(paginated.results);
+      nextCursor = paginated.nextCursor;
+      hasMore = paginated.hasMore;
+    }
 
     // Mark messages from the other user as read
     await prisma.directMessage.updateMany({
@@ -370,7 +409,7 @@ router.delete('/messages/:id', authMiddleware, requireDmOwnership, async (req: A
 
 // Matches either a Unicode emoji sequence or a shortcode (with or without colons)
 const emojiShortcodeRegex = /^:?[a-z0-9_+-]+:?$/;
-const unicodeEmojiRegex = /^\p{Extended_Pictographic}(\u200d\p{Extended_Pictographic}|\uFE0F)*$/u;
+const unicodeEmojiRegex = /^(\p{Regional_Indicator}{2}|(\p{Extended_Pictographic})(\p{Emoji_Modifier}|\uFE0F|\u200d(\p{Extended_Pictographic}))*)+$/u;
 
 const dmReactionSchema = z.object({
   emoji: z.string().min(1).max(32)
@@ -497,6 +536,42 @@ router.post('/:userId/read', authMiddleware, async (req: AuthRequest, res: Respo
   } catch (error) {
     logError('Mark DMs as read error', error);
     res.status(500).json({ error: 'Failed to mark messages as read' });
+  }
+});
+
+// POST /dms/:userId/unread - Mark DM conversation as unread from a specific message
+router.post('/:userId/unread', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const currentUserId = req.user!.userId;
+    const otherUserId = parseIntParam(req.params.userId);
+    if (!otherUserId) {
+      res.status(400).json({ error: 'Invalid user ID' });
+      return;
+    }
+
+    const messageId = req.body?.messageId;
+    if (!messageId || typeof messageId !== 'number') {
+      res.status(400).json({ error: 'messageId is required' });
+      return;
+    }
+
+    // Set readAt to null on messages from the other user starting from messageId
+    const result = await prisma.directMessage.updateMany({
+      where: {
+        fromUserId: otherUserId,
+        toUserId: currentUserId,
+        deletedAt: null,
+        id: { gte: messageId },
+      },
+      data: {
+        readAt: null,
+      },
+    });
+
+    res.json({ markedAsUnread: result.count });
+  } catch (error) {
+    logError('Mark DMs as unread error', error);
+    res.status(500).json({ error: 'Failed to mark messages as unread' });
   }
 });
 

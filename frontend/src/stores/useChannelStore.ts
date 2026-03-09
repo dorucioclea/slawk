@@ -33,6 +33,7 @@ interface ChannelState {
   activeChannelId: number | null;
   activeDMId: number | null;
   scrollToMessageId: number | null;
+  dmScrollToMessageId: number | null;
   isLoading: boolean;
   loadError: string | null;
 
@@ -43,7 +44,7 @@ interface ChannelState {
   leaveChannel: (channelId: number) => Promise<number | null>;
   toggleStar: (channelId: number) => void;
   setActiveChannel: (channelId: number, scrollToMessageId?: number) => void;
-  setActiveDM: (dmId: number) => void;
+  setActiveDM: (dmId: number, scrollToMessageId?: number) => void;
   startDM: (userId: number, userName: string, userAvatar?: string) => void;
   addOrUpdateDM: (userId: number, userName: string, userAvatar?: string) => void;
   updateDMUser: (userId: number, updates: Partial<Pick<DirectMessage, 'userName' | 'userAvatar'>>) => void;
@@ -64,6 +65,7 @@ export const useChannelStore = create<ChannelState>((set, get) => ({
   activeChannelId: null,
   activeDMId: null,
   scrollToMessageId: null,
+  dmScrollToMessageId: null,
   isLoading: false,
   loadError: null,
 
@@ -241,8 +243,8 @@ export const useChannelStore = create<ChannelState>((set, get) => ({
     }
   },
 
-  setActiveDM: (dmId: number) => {
-    set({ activeDMId: dmId, activeChannelId: null });
+  setActiveDM: (dmId: number, scrollToMessageId?: number) => {
+    set({ activeDMId: dmId, activeChannelId: null, dmScrollToMessageId: scrollToMessageId ?? null });
     get().markDMAsRead(dmId);
   },
 

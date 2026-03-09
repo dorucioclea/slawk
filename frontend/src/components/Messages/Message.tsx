@@ -15,7 +15,7 @@ import { useMessageActions } from '@/hooks/useMessageActions';
 import { useMessageHover } from '@/hooks/useMessageHover';
 import { useMessageEdit } from '@/hooks/useMessageEdit';
 import type { Message as MessageType } from '@/lib/types';
-import { getAuthFileUrl, getUsers, markChannelUnread } from '@/lib/api';
+import { getAuthFileUrl, getFileUrl, getUsers, markChannelUnread } from '@/lib/api';
 import { renderMessageContent } from '@/lib/renderMessageContent';
 import { ImageLightbox } from './ImageLightbox';
 import { MessageToolbar } from './MessageToolbar';
@@ -188,7 +188,7 @@ export function Message({ message, showAvatar, isCompact, onOpenThread, readOnly
                       controlsList="nodownload noplaybackrate"
                       preload="metadata"
                       className="h-8"
-                      src={getAuthFileUrl(file.url)}
+                      src={getFileUrl(file.id)}
                     />
                   </div>
                 ) : file.mimetype.startsWith('video/') ? (
@@ -197,7 +197,7 @@ export function Message({ message, showAvatar, isCompact, onOpenThread, readOnly
                       controls
                       preload="metadata"
                       className="max-h-[300px] max-w-[400px]"
-                      src={getAuthFileUrl(file.url)}
+                      src={getFileUrl(file.id)}
                     />
                     <div className="flex items-center gap-2 px-3 py-1.5 border-t border-slack-border">
                       <span className="text-[13px] text-slack-link truncate max-w-[200px]">
@@ -220,11 +220,11 @@ export function Message({ message, showAvatar, isCompact, onOpenThread, readOnly
                   <div>
                     <button
                       data-testid="image-thumbnail"
-                      onClick={() => { setLightboxSrc(getAuthFileUrl(file.url)); setLightboxAlt(file.originalName); }}
+                      onClick={() => { setLightboxSrc(getFileUrl(file.id)); setLightboxAlt(file.originalName); }}
                       className="block cursor-zoom-in focus:outline-none"
                     >
                       <img
-                        src={getAuthFileUrl(file.url)}
+                        src={getFileUrl(file.id)}
                         alt={file.originalName}
                         className="max-h-[200px] max-w-[300px] object-contain"
                       />

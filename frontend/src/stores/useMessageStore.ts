@@ -59,7 +59,7 @@ interface MessageState {
   loadedChannelId: number | null;
   sendError: string | null;
 
-  fetchMessages: (channelId: number) => Promise<void>;
+  fetchMessages: (channelId: number, around?: number) => Promise<void>;
   getMessagesForChannel: (channelId: number) => Message[];
   sendMessage: (channelId: number, content: string, fileIds?: number[]) => Promise<void>;
   editMessage: (messageId: number, content: string) => Promise<void>;
@@ -83,15 +83,15 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   loadedChannelId: null,
   sendError: null,
 
-  fetchMessages: async (channelId: number) => {
+  fetchMessages: async (channelId: number, around?: number) => {
     set({ isLoading: true, loadError: null, loadedChannelId: channelId });
     try {
-      const data = await api.getMessages(channelId);
+      const data = await api.getMessages(channelId, undefined, 50, around);
       // Discard stale response if the user already switched to another channel
       if (get().loadedChannelId !== channelId) return;
       const messages = data.messages.map(transformApiMessage);
-      // API returns desc order, reverse to asc for display
-      messages.reverse();
+      // API returns desc order (or chronological for around), reverse if not around
+      if (!around) messages.reverse();
       set({ messages, isLoading: false, loadedChannelId: channelId });
     } catch {
       if (get().loadedChannelId !== channelId) return;

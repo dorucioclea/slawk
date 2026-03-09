@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { SendHorizontal, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Avatar } from '@/components/ui/avatar';
-import { getThread, replyToMessage, getDMThread, replyToDM, getAuthFileUrl, deleteMessage, deleteDM, type ApiDirectMessage } from '@/lib/api';
+import { getThread, replyToMessage, getDMThread, replyToDM, getAuthFileUrl, getFileUrl, deleteMessage, deleteDM, type ApiDirectMessage } from '@/lib/api';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { cn } from '@/lib/utils';
 import { getSocket } from '@/lib/socket';
@@ -174,13 +174,13 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange, variant = 
           <div key={file.id} className="rounded-lg border border-slack-border overflow-hidden">
             {file.mimetype.startsWith('image/') ? (
               <img
-                src={getAuthFileUrl(file.url)}
+                src={getFileUrl(file.id)}
                 alt={file.originalName}
                 className="max-w-[200px] max-h-[150px] object-cover"
               />
             ) : (
               <a
-                href={getAuthFileUrl(file.url)}
+                href={getFileUrl(file.id)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block px-3 py-2 text-[13px] text-slack-link hover:underline"

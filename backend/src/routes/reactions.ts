@@ -12,7 +12,7 @@ const router = Router();
 
 // Matches either a Unicode emoji sequence or a shortcode (with or without colons)
 const emojiShortcodeRegex = /^:?[a-z0-9_+-]+:?$/;
-const unicodeEmojiRegex = /^\p{Extended_Pictographic}(\u200d\p{Extended_Pictographic}|\uFE0F)*$/u;
+const unicodeEmojiRegex = /^(\p{Regional_Indicator}{2}|(\p{Extended_Pictographic})(\p{Emoji_Modifier}|\uFE0F|\u200d(\p{Extended_Pictographic}))*)+$/u;
 
 const reactionSchema = z.object({
   emoji: z.string().min(1).max(32)

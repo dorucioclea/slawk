@@ -99,6 +99,61 @@ router.get('/:id/messages', authMiddleware, requirePublicChannelReadAccess, asyn
   try {
     const channelId = req.channelId!;
     const { limit, cursor } = parsePagination(req);
+    const aroundRaw = req.query.around ? parseInt(req.query.around as string) : undefined;
+    const around = aroundRaw !== undefined && !isNaN(aroundRaw) && aroundRaw > 0 ? aroundRaw : undefined;
+
+    const messageInclude = {
+      ...MESSAGE_INCLUDE_FULL,
+      replies: {
+        select: {
+          user: {
+            select: { id: true, name: true, avatar: true },
+          },
+        },
+        distinct: ['userId' as const],
+        take: 5,
+      },
+    };
+
+    const enrichMessages = (msgs: any[]) =>
+      msgs.map((msg) => {
+        const { replies, ...rest } = msg;
+        const threadParticipants = replies
+          ? replies.map((r: { user: { id: number; name: string; avatar: string | null } }) => r.user)
+          : [];
+        return { ...rest, threadParticipants };
+      });
+
+    // "around" mode: fetch messages surrounding a target message ID
+    if (around) {
+      const half = Math.floor(limit / 2);
+      const [before, target, after] = await Promise.all([
+        prisma.message.findMany({
+          where: { channelId, threadId: null, deletedAt: null, id: { lt: around } },
+          include: messageInclude,
+          orderBy: { createdAt: 'desc' },
+          take: half,
+        }),
+        prisma.message.findMany({
+          where: { channelId, threadId: null, deletedAt: null, id: around },
+          include: messageInclude,
+          take: 1,
+        }),
+        prisma.message.findMany({
+          where: { channelId, threadId: null, deletedAt: null, id: { gt: around } },
+          include: messageInclude,
+          orderBy: { createdAt: 'asc' },
+          take: half,
+        }),
+      ]);
+      const combined = [...before.reverse(), ...target, ...after];
+      res.json({
+        messages: enrichMessages(combined),
+        nextCursor: undefined,
+        hasMore: false,
+      });
+      return;
+    }
 
     const messages = await prisma.message.findMany({
       where: {
@@ -106,18 +161,7 @@ router.get('/:id/messages', authMiddleware, requirePublicChannelReadAccess, asyn
         threadId: null, // Only get top-level messages
         deletedAt: null, // Exclude deleted messages
       },
-      include: {
-        ...MESSAGE_INCLUDE_FULL,
-        replies: {
-          select: {
-            user: {
-              select: { id: true, name: true, avatar: true },
-            },
-          },
-          distinct: ['userId'],
-          take: 5,
-        },
-      },
+      include: messageInclude,
       orderBy: { createdAt: 'desc' },
       take: limit + 1,
       ...(cursor && {
@@ -128,17 +172,8 @@ router.get('/:id/messages', authMiddleware, requirePublicChannelReadAccess, asyn
 
     const { results: resultMessages, nextCursor, hasMore } = paginateResults(messages, limit);
 
-    // Extract unique thread participants from replies
-    const enrichedMessages = resultMessages.map((msg) => {
-      const { replies, ...rest } = msg;
-      const threadParticipants = replies
-        ? replies.map((r: { user: { id: number; name: string; avatar: string | null } }) => r.user)
-        : [];
-      return { ...rest, threadParticipants };
-    });
-
     res.json({
-      messages: enrichedMessages,
+      messages: enrichMessages(resultMessages),
       nextCursor,
       hasMore,
     });

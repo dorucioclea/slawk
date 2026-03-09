@@ -30,6 +30,7 @@ import { PanelHeader } from './PanelHeader';
 import { HuddleButton } from '@/components/Huddle/HuddleButton';
 import { HuddleInvite } from '@/components/Huddle/HuddleInvite';
 import { renderMessageContent } from '@/lib/renderMessageContent';
+import { markDMUnread } from '@/lib/api';
 import { useMobileStore } from '@/stores/useMobileStore';
 import type { DMMessage } from '@/stores/useDMStore';
 
@@ -70,7 +71,10 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
   const [showFiles, setShowFiles] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [isStarred, setIsStarred] = useState(false);
+  const [highlightedId, setHighlightedId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const didScrollToTarget = useRef(false);
   const hoverLeaveTimer = useRef<ReturnType<typeof setTimeout>>();
   const currentUser = useAuthStore((s) => s.user);
   const openSidebar = useMobileStore((s) => s.openSidebar);
@@ -86,13 +90,41 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
     onSave: (id, content) => storeEditMessage(id, content, userId),
   });
 
-  useEffect(() => {
-    fetchConversation(userId);
-  }, [userId, fetchConversation]);
+  const dmScrollToMessageId = useChannelStore((s) => s.dmScrollToMessageId);
 
   useEffect(() => {
+    messageRefs.current = new Map();
+    fetchConversation(userId, dmScrollToMessageId ?? undefined);
+  }, [userId, fetchConversation, dmScrollToMessageId]);
+
+  // Scroll to target message from search result
+  useEffect(() => {
+    if (!dmScrollToMessageId || messages.length === 0) return;
+    const el = messageRefs.current.get(dmScrollToMessageId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedId(dmScrollToMessageId);
+      didScrollToTarget.current = true;
+      useChannelStore.setState({ dmScrollToMessageId: null });
+    }
+  }, [dmScrollToMessageId, messages.length]);
+
+  // Auto-clear highlight after 2s
+  useEffect(() => {
+    if (!highlightedId) return;
+    const timer = setTimeout(() => setHighlightedId(null), 2000);
+    return () => clearTimeout(timer);
+  }, [highlightedId]);
+
+  // Auto-scroll to bottom on new messages (not when targeting a specific message)
+  useEffect(() => {
+    if (dmScrollToMessageId) return;
+    if (didScrollToTarget.current) {
+      didScrollToTarget.current = false;
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+  }, [messages.length, dmScrollToMessageId]);
 
   const handleStartEdit = (msg: { id: number; content: string }) => {
     startEdit(msg.id, msg.content);
@@ -234,7 +266,14 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
                   const isEditing = editingId === msg.id;
 
                   return (
-                    <div key={msg.id}>
+                    <div
+                      key={msg.id}
+                      ref={(el) => {
+                        if (el) messageRefs.current.set(msg.id, el);
+                        else messageRefs.current.delete(msg.id);
+                      }}
+                      className={highlightedId === msg.id ? 'transition-colors duration-700 bg-yellow-100' : ''}
+                    >
                       {showDate && (
                         <div className="relative my-[10px] flex items-center">
                           <div className="flex-1 border-t border-slack-border-light" />
@@ -362,10 +401,10 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
                             onBookmarkClick={() => toggleBookmark(msg.id)}
                             isBookmarked={bookmarkedIds.has(msg.id)}
                             onThreadClick={() => handleOpenThread(msg.id)}
-                            onMoreClick={isOwner ? () =>
+                            onMoreClick={() =>
                               setShowMoreMenuId((prev) =>
                                 prev === msg.id ? null : msg.id,
-                              ) : undefined}
+                              )}
                           />
                         )}
 
@@ -390,6 +429,19 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
                             showOwnerActions={isOwner}
                             onEdit={() => handleStartEdit(msg)}
                             onDelete={() => handleDelete(msg.id)}
+                            onMarkUnread={() => {
+                              setShowMoreMenuId(null);
+                              // Count unread messages from this point forward
+                              const unreadCount = messages.filter((m) => m.id >= msg.id).length;
+                              useChannelStore.getState().incrementDMUnread(userId);
+                              // Update in store and persist to backend
+                              useChannelStore.setState((s) => ({
+                                directMessages: s.directMessages.map((dm) =>
+                                  dm.userId === userId ? { ...dm, unreadCount } : dm
+                                ),
+                              }));
+                              markDMUnread(userId, msg.id).catch(() => {});
+                            }}
                           />
                         )}
 

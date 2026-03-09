@@ -240,14 +240,22 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    // Enrich with real-time presence status
+    const online = isUserOnline(userId);
+    const enrichedUser = {
+      ...user,
+      status: online ? 'online' : (user.status || 'offline'),
+      isOnline: online,
+    };
+
     // Only expose email when viewing your own profile
     if (userId !== req.user!.userId) {
-      const { email: _, ...safeUser } = user;
+      const { email: _, ...safeUser } = enrichedUser;
       res.json(safeUser);
       return;
     }
 
-    res.json(user);
+    res.json(enrichedUser);
   } catch (error) {
     logError('Get user error', error);
     res.status(500).json({ error: 'Failed to get user' });

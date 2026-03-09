@@ -52,29 +52,31 @@ function RouteSync() {
   const setActiveDM = useChannelStore((s) => s.setActiveDM);
   const channels = useChannelStore((s) => s.channels);
 
+  // Re-run when channels finish loading so we can validate the channel exists
+  const channelsLoaded = channels.length > 0;
+
   useEffect(() => {
     if (channelId) {
       const id = parseInt(channelId, 10);
       if (isNaN(id) || id <= 0) return;
       // Verify channel exists (non-member public channels are allowed in read-only mode)
-      const channel = channels.find((ch) => ch.id === id);
-      if (channels.length > 0 && !channel) {
+      const allChannels = useChannelStore.getState().channels;
+      if (allChannels.length > 0 && !allChannels.find((ch) => ch.id === id)) {
         navigate('/', { replace: true });
         return;
       }
       const scrollRaw = (location.state as any)?.scrollToMessageId;
       const scrollToMessageId = typeof scrollRaw === 'number' && scrollRaw > 0 ? scrollRaw : undefined;
-      // Guard: skip if already active to prevent infinite loop
-      // (setActiveChannel → markChannelAsRead creates new channels array → re-triggers this effect)
-      if (useChannelStore.getState().activeChannelId === id && !scrollToMessageId) return;
       setActiveChannel(id, scrollToMessageId);
     } else if (userId) {
       const id = parseInt(userId, 10);
       if (!isNaN(id) && id > 0) {
-        setActiveDM(id);
+        const dmScrollRaw = (location.state as any)?.scrollToMessageId;
+        const dmScrollToMessageId = typeof dmScrollRaw === 'number' && dmScrollRaw > 0 ? dmScrollRaw : undefined;
+        setActiveDM(id, dmScrollToMessageId);
       }
     }
-  }, [channelId, userId, setActiveChannel, setActiveDM, location.state, channels, navigate]);
+  }, [channelId, userId, setActiveChannel, setActiveDM, location.state, channelsLoaded, navigate]);
 
   return null;
 }

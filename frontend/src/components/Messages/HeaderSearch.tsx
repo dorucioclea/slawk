@@ -77,7 +77,7 @@ export function HeaderSearch({ testIdPrefix = '' }: HeaderSearchProps) {
     if (result.channel) {
       navigate(`/c/${result.channel.id}`, { state: { scrollToMessageId: result.id } });
     } else if (result.participant) {
-      navigate(`/d/${result.participant.id}`);
+      navigate(`/d/${result.participant.id}`, { state: { scrollToMessageId: result.id } });
     }
     setSearchQuery('');
     setShowResults(false);
