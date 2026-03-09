@@ -71,7 +71,7 @@ interface MessageState {
   // Socket event handlers
   onMessageNew: (msg: api.ApiMessage) => void;
   onMessageUpdated: (msg: api.ApiMessage) => void;
-  onMessageDeleted: (data: { messageId: number }) => void;
+  onMessageDeleted: (data: { messageId: number; threadId?: number | null }) => void;
   onReactionAdded: (data: { messageId: number; reaction: { emoji: string; userId: number; user: { name: string } } }) => void;
   onReactionRemoved: (data: { messageId: number; emoji: string; userId: number }) => void;
 }
@@ -210,10 +210,22 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     });
   },
 
-  onMessageDeleted: (data: { messageId: number }) => {
-    set({
-      messages: get().messages.filter((m) => m.id !== data.messageId),
-    });
+  onMessageDeleted: (data: { messageId: number; threadId?: number | null }) => {
+    if (data.threadId) {
+      // A thread reply was deleted — decrement the parent message's threadCount
+      set({
+        messages: get().messages.map((m) =>
+          m.id === data.threadId
+            ? { ...m, threadCount: Math.max(0, m.threadCount - 1) }
+            : m,
+        ),
+      });
+    } else {
+      // A top-level message was deleted — remove it from the list
+      set({
+        messages: get().messages.filter((m) => m.id !== data.messageId),
+      });
+    }
   },
 
   onReactionAdded: (data) => {

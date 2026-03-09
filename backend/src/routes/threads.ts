@@ -161,6 +161,16 @@ router.delete('/:id', authMiddleware, requireMessageAccess, async (req: AuthRequ
       data: { deletedAt: new Date() },
     });
 
+    // Broadcast deletion to channel so other clients update in real-time
+    const io = getIO();
+    if (io) {
+      io.to(`channel:${message.channelId}`).emit('message:deleted', {
+        messageId,
+        threadId: message.threadId ?? null,
+        channelId: message.channelId,
+      });
+    }
+
     res.json({ message: 'Message deleted successfully' });
   } catch (error) {
     logError('Delete message error', error);

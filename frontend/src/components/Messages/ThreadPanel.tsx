@@ -112,8 +112,16 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange, variant = 
           return [...prev, normalized];
         });
       };
+      const handleDeletedMessage = (data: { messageId: number; threadId?: number | null }) => {
+        if (data.threadId !== messageId) return;
+        setReplies((prev) => prev.filter((r) => r.id !== data.messageId));
+      };
       socket.on('message:new', handleNewMessage);
-      return () => { socket.off('message:new', handleNewMessage); };
+      socket.on('message:deleted', handleDeletedMessage);
+      return () => {
+        socket.off('message:new', handleNewMessage);
+        socket.off('message:deleted', handleDeletedMessage);
+      };
     }
   }, [messageId, isDM]);
 

@@ -426,7 +426,11 @@ export function initializeWebSocket(httpServer: HttpServer) {
           data: { deletedAt: new Date() },
         });
 
-        io.to(`channel:${message.channelId}`).emit('message:deleted', { messageId: data.messageId });
+        io.to(`channel:${message.channelId}`).emit('message:deleted', {
+          messageId: data.messageId,
+          threadId: message.threadId ?? null,
+          channelId: message.channelId,
+        });
       } catch (error) {
         logError('WebSocket delete message error', error);
         socket.emit('error', { message: 'Failed to delete message' });
