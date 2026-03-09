@@ -99,8 +99,8 @@ const INLINE_SAFE_TYPES = new Set([
   'video/mp4', 'video/webm',
 ]);
 
-// Helper to upload to GCS and get signed URL
-async function uploadToGCS(localPath: string, filename: string, mimetype: string): Promise<{ gcsPath: string; signedUrl: string }> {
+// Helper to upload to GCS
+async function uploadToGCS(localPath: string, filename: string, mimetype: string): Promise<{ gcsPath: string }> {
   if (!bucket) throw new Error('GCS not configured');
 
   // Sanitize filename for GCS path (strip path separators and control chars)
@@ -111,16 +111,10 @@ async function uploadToGCS(localPath: string, filename: string, mimetype: string
     metadata: { contentType: mimetype },
   });
 
-  // Generate signed URL valid for 30 minutes
-  const [signedUrl] = await bucket.file(gcsPath).getSignedUrl({
-    action: 'read',
-    expires: Date.now() + 30 * 60 * 1000,
-  });
-
   // Delete local temp file after GCS upload
   fs.unlinkSync(localPath);
 
-  return { gcsPath, signedUrl };
+  return { gcsPath };
 }
 
 // RFC 5987 Content-Disposition filename encoding
@@ -237,7 +231,7 @@ router.post('/', authMiddleware, uploadLimiter, (req: AuthRequest, res: Response
     if (bucket) {
       try {
         const gcsResult = await uploadToGCS(file.path, file.originalname, file.mimetype);
-        url = gcsResult.signedUrl;
+        url = ''; // Will be set to download endpoint URL after record creation
         gcsPath = gcsResult.gcsPath;
       } catch (gcsError) {
         logError('GCS upload failed', gcsError);
@@ -274,14 +268,13 @@ router.post('/', authMiddleware, uploadLimiter, (req: AuthRequest, res: Response
       },
     });
 
-    // For local files, set URL to authenticated download endpoint
-    if (!gcsPath) {
-      await prisma.file.update({
-        where: { id: fileRecord.id },
-        data: { url: `/files/${fileRecord.id}/download` },
-      });
-      fileRecord.url = `/files/${fileRecord.id}/download`;
-    }
+    // Set URL to authenticated download endpoint for all files
+    const downloadUrl = `/files/${fileRecord.id}/download`;
+    await prisma.file.update({
+      where: { id: fileRecord.id },
+      data: { url: downloadUrl },
+    });
+    fileRecord.url = downloadUrl;
 
     res.status(201).json(fileRecord);
   } catch (error) {
@@ -290,22 +283,10 @@ router.post('/', authMiddleware, uploadLimiter, (req: AuthRequest, res: Response
   }
 });
 
-// GET /files/:id - Get file info (refreshes signed URL for GCS files)
+// GET /files/:id - Get file info
 router.get('/:id', authMiddleware, requireFileAccess, async (req: AuthRequest, res: Response) => {
   try {
-    const file = req.file;
-
-    // Generate fresh signed URL for GCS files
-    if (file.gcsPath && bucket) {
-      const [signedUrl] = await bucket.file(file.gcsPath).getSignedUrl({
-        action: 'read',
-        expires: Date.now() + 30 * 60 * 1000,
-      });
-      res.json({ ...file, url: signedUrl });
-      return;
-    }
-
-    res.json(file);
+    res.json(req.file);
   } catch (error) {
     logError('Get file error', error);
     res.status(500).json({ error: 'Failed to get file' });
@@ -364,17 +345,23 @@ router.get('/:id/download', (req: AuthRequest, res: Response, next) => {
   try {
     const file = req.file;
 
-    // GCS files: redirect to signed URL
+    // GCS files: stream through backend (ADC on Cloud Run lacks signing key for getSignedUrl)
     if (file.gcsPath && bucket) {
-      const signedUrlOpts: any = {
-        action: 'read',
-        expires: Date.now() + 15 * 60 * 1000, // 15 min
-      };
-      if (req.query.dl === '1') {
-        signedUrlOpts.responseDisposition = contentDisposition('attachment', file.originalName);
-      }
-      const [signedUrl] = await bucket.file(file.gcsPath).getSignedUrl(signedUrlOpts);
-      res.redirect(signedUrl);
+      const forceAttachment = !INLINE_SAFE_TYPES.has(file.mimetype);
+      const disposition = (req.query.dl === '1' || forceAttachment) ? 'attachment' : 'inline';
+
+      res.setHeader('Content-Type', file.mimetype);
+      res.setHeader('Content-Disposition', contentDisposition(disposition, file.originalName));
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+
+      const gcsFile = bucket.file(file.gcsPath);
+      const stream = gcsFile.createReadStream();
+      stream.on('error', (err) => {
+        logError('GCS stream error', err);
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to read file from storage' });
+      });
+      stream.pipe(res);
       return;
     }
 
@@ -498,7 +485,13 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
 
     const files = await prisma.file.findMany({
-      where: { userId },
+      where: {
+        userId,
+        OR: [
+          { messageId: null },
+          { message: { deletedAt: null } },
+        ],
+      },
       include: {
         user: {
           select: { id: true, name: true, avatar: true },
