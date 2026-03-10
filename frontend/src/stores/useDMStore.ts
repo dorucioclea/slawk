@@ -3,6 +3,15 @@ import { getConversation, sendDM, editDM, deleteDM, addDMReaction, removeDMReact
 import { useAuthStore } from './useAuthStore';
 import type { Reaction } from '@/lib/types';
 
+export interface DMFile {
+  id: number;
+  filename: string;
+  originalName: string;
+  mimetype: string;
+  size: number;
+  url: string;
+}
+
 export interface DMMessage {
   id: number;
   content: string;
@@ -15,6 +24,7 @@ export interface DMMessage {
   replyCount: number;
   threadParticipants: { id: number; name: string; avatar: string | null }[];
   reactions: Reaction[];
+  files: DMFile[];
 }
 
 function groupReactions(apiReactions?: ApiDMReaction[]): Reaction[] {
@@ -46,6 +56,14 @@ function transformDM(dm: ApiDirectMessage): DMMessage {
     replyCount: dm._count?.replies ?? 0,
     threadParticipants: dm.threadParticipants ?? [],
     reactions: groupReactions(dm.reactions),
+    files: (dm.files ?? []).map((f: any) => ({
+      id: f.id,
+      filename: f.filename,
+      originalName: f.originalName ?? f.filename,
+      mimetype: f.mimetype,
+      size: f.size,
+      url: f.url,
+    })),
   };
 }
 
@@ -58,7 +76,7 @@ interface DMState {
   sendError: string | null;
 
   fetchConversation: (userId: number, around?: number) => Promise<void>;
-  sendMessage: (userId: number, content: string) => Promise<void>;
+  sendMessage: (userId: number, content: string, fileIds?: number[]) => Promise<void>;
   editMessage: (messageId: number, content: string, userId: number) => Promise<void>;
   deleteMessage: (messageId: number, userId: number) => Promise<void>;
   addIncomingMessage: (dm: ApiDirectMessage, currentUserId: number) => void;
@@ -101,10 +119,10 @@ export const useDMStore = create<DMState>((set, get) => ({
     }
   },
 
-  sendMessage: async (userId: number, content: string) => {
+  sendMessage: async (userId: number, content: string, fileIds?: number[]) => {
     set({ isSending: true, sendError: null });
     try {
-      const dm = await sendDM(userId, content);
+      const dm = await sendDM(userId, content, fileIds);
       const message = transformDM(dm);
       set((state) => ({
         messages: {

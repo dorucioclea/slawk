@@ -277,11 +277,12 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange, variant = 
     setReplyError(null);
     try {
       let apiReply;
+      const fileIds = editor.pendingFiles.map((f) => f.id);
+      const fileIdsParam = fileIds.length > 0 ? fileIds : undefined;
       if (isDM) {
-        apiReply = await replyToDM(messageId, content);
+        apiReply = await replyToDM(messageId, content, fileIdsParam);
       } else {
-        const fileIds = editor.pendingFiles.map((f) => f.id);
-        apiReply = await replyToMessage(messageId, content, fileIds.length > 0 ? fileIds : undefined);
+        apiReply = await replyToMessage(messageId, content, fileIdsParam);
       }
       const reply = normalizeToMessage(apiReply, isDM);
       setReplies((prev) => {

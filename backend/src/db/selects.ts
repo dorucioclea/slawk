@@ -43,4 +43,5 @@ export const DM_INCLUDE_USERS = {
   fromUser: { select: USER_SELECT_BASIC },
   toUser: { select: USER_SELECT_BASIC },
   reactions: { include: { user: { select: { id: true, name: true } } } },
+  files: { select: FILE_SELECT },
 } as const;

@@ -5,6 +5,8 @@ import {
   FileText,
   Star,
   Menu,
+  Download,
+  FileIcon,
 } from 'lucide-react';
 import { Avatar } from '@/components/ui/avatar';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -30,7 +32,7 @@ import { PanelHeader } from './PanelHeader';
 import { HuddleButton } from '@/components/Huddle/HuddleButton';
 import { HuddleSystemMessage } from '@/components/Huddle/HuddleInvite';
 import { renderMessageContent } from '@/lib/renderMessageContent';
-import { markDMUnread, pinDM, unpinDM, getPinnedDMs } from '@/lib/api';
+import { markDMUnread, pinDM, unpinDM, getPinnedDMs, getFileUrl, getAuthFileUrl } from '@/lib/api';
 import { useMobileStore } from '@/stores/useMobileStore';
 import type { DMMessage } from '@/stores/useDMStore';
 
@@ -400,6 +402,44 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
                               )}
                             </div>
                           )}
+                          {msg.files && msg.files.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              {msg.files.map((file) => (
+                                <div key={file.id} className="rounded-lg border border-slack-border overflow-hidden">
+                                  {file.mimetype.startsWith('audio/') || (file.mimetype === 'video/webm' && file.originalName.startsWith('voice-message')) ? (
+                                    <div className="px-3 py-2.5">
+                                      <audio controls controlsList="nodownload noplaybackrate" preload="metadata" className="h-8" src={getFileUrl(file.id)} />
+                                    </div>
+                                  ) : file.mimetype.startsWith('video/') ? (
+                                    <div>
+                                      <video controls preload="metadata" className="max-h-[300px] max-w-[400px]" src={getFileUrl(file.id)} />
+                                      <div className="flex items-center gap-2 px-3 py-1.5 border-t border-slack-border">
+                                        <span className="text-[13px] text-slack-link truncate max-w-[200px]">{file.originalName}</span>
+                                        <a href={getAuthFileUrl(`/files/${file.id}/download`, { download: true })} download={file.originalName.replace(/[/\\:\0]/g, '_')} rel="noopener" className="ml-auto flex-shrink-0 text-slack-disabled hover:text-slack-primary" onClick={(e) => e.stopPropagation()}>
+                                          <Download className="h-4 w-4" />
+                                        </a>
+                                      </div>
+                                    </div>
+                                  ) : file.mimetype.startsWith('image/') ? (
+                                    <div>
+                                      <img src={getFileUrl(file.id)} alt={file.originalName} className="max-h-[200px] max-w-[300px] object-contain" />
+                                      <div className="flex items-center gap-2 px-3 py-1.5 border-t border-slack-border">
+                                        <span className="text-[13px] text-slack-link truncate max-w-[200px]">{file.originalName}</span>
+                                        <a href={getAuthFileUrl(`/files/${file.id}/download`, { download: true })} download={file.originalName.replace(/[/\\:\0]/g, '_')} rel="noopener" className="ml-auto flex-shrink-0 text-slack-disabled hover:text-slack-primary" onClick={(e) => e.stopPropagation()}>
+                                          <Download className="h-4 w-4" />
+                                        </a>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <a href={getAuthFileUrl(`/files/${file.id}/download`, { download: true })} download={file.originalName.replace(/[/\\:\0]/g, '_')} rel="noopener" className="flex items-center gap-2 px-3 py-2">
+                                      <FileIcon className="h-5 w-5 text-slack-secondary flex-shrink-0" />
+                                      <span className="text-[13px] text-slack-link truncate max-w-[200px]">{file.originalName}</span>
+                                    </a>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           {msg.reactions.length > 0 && (
                             <MessageReactions
                               reactions={msg.reactions}
@@ -486,7 +526,7 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
           {/* Input */}
           <MessageInput
             placeholder={`Message ${userName}`}
-            onSend={async (content) => { await storeSendMessage(userId, content); }}
+            onSend={async (content, fileIds) => { await storeSendMessage(userId, content, fileIds); }}
             sendError={sendError}
             clearSendError={clearSendError}
             dmParticipantIds={currentUser ? [currentUser.id, userId] : [userId]}

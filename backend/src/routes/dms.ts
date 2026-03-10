@@ -5,7 +5,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { requireDmOwnership, requireDmAccess } from '../middleware/authorize.js';
 import { AuthRequest } from '../types.js';
 import { isUserOnline, getIO } from '../websocket/index.js';
-import { USER_SELECT_BASIC, DM_INCLUDE_USERS } from '../db/selects.js';
+import { USER_SELECT_BASIC, FILE_SELECT, DM_INCLUDE_USERS } from '../db/selects.js';
 import { parsePagination, paginateResults } from '../utils/pagination.js';
 import { parseIntParam } from '../utils/params.js';
 import { logError } from '../utils/logger.js';
@@ -14,15 +14,19 @@ const router = Router();
 
 const sendDMSchema = z.object({
   toUserId: z.number().int().positive(),
-  content: z.string().min(1).max(4000)
+  content: z.string().max(4000)
     .refine(val => !val.includes('\u0000'), { message: 'Content cannot contain null bytes' }),
-});
+  fileIds: z.array(z.number()).max(10).optional(),
+}).refine(
+  (data) => (data.content?.trim().length ?? 0) > 0 || (data.fileIds && data.fileIds.length > 0),
+  { message: 'Message must have content or file attachments' },
+);
 
 // POST /dms - Send a direct message
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const fromUserId = req.user!.userId;
-    const { toUserId, content } = sendDMSchema.parse(req.body);
+    const { toUserId, content, fileIds } = sendDMSchema.parse(req.body);
 
     // Check if recipient exists (self-DM is allowed)
     if (fromUserId !== toUserId) {
@@ -36,15 +40,31 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       }
     }
 
-    const dm = await prisma.directMessage.create({
-      data: {
-        content,
-        fromUserId,
-        toUserId,
-        // Self-DMs are auto-read (no notifications for yourself)
-        ...(fromUserId === toUserId && { readAt: new Date() }),
-      },
-      include: DM_INCLUDE_USERS,
+    const dm = await prisma.$transaction(async (tx) => {
+      const created = await tx.directMessage.create({
+        data: {
+          content,
+          fromUserId,
+          toUserId,
+          // Self-DMs are auto-read (no notifications for yourself)
+          ...(fromUserId === toUserId && { readAt: new Date() }),
+        },
+      });
+
+      if (fileIds && fileIds.length > 0) {
+        const updated = await tx.file.updateMany({
+          where: { id: { in: fileIds }, userId: fromUserId, messageId: null, dmId: null },
+          data: { dmId: created.id },
+        });
+        if (updated.count !== fileIds.length) {
+          throw new Error('Invalid file IDs or files already attached');
+        }
+      }
+
+      return tx.directMessage.findUnique({
+        where: { id: created.id },
+        include: DM_INCLUDE_USERS,
+      });
     });
 
     res.status(201).json(dm);
@@ -272,25 +292,45 @@ router.post('/messages/:id/reply', authMiddleware, requireDmAccess, async (req: 
       return;
     }
 
-    const contentSchema = z.object({
-      content: z.string().min(1).max(4000)
+    const replySchema = z.object({
+      content: z.string().max(4000)
         .refine(val => !val.includes('\u0000'), { message: 'Content cannot contain null bytes' }),
-    });
-    const { content } = contentSchema.parse(req.body);
+      fileIds: z.array(z.number()).max(10).optional(),
+    }).refine(
+      (data) => (data.content?.trim().length ?? 0) > 0 || (data.fileIds && data.fileIds.length > 0),
+      { message: 'Reply must have content or file attachments' },
+    );
+    const { content, fileIds } = replySchema.parse(req.body);
 
     // Reply goes to the same conversation (same from/to pair)
     const toUserId = parentDm.fromUserId === fromUserId ? parentDm.toUserId : parentDm.fromUserId;
 
-    const reply = await prisma.directMessage.create({
-      data: {
-        content,
-        fromUserId,
-        toUserId,
-        threadId: parentId,
-        // Self-DMs are auto-read
-        ...(fromUserId === toUserId && { readAt: new Date() }),
-      },
-      include: DM_INCLUDE_USERS,
+    const reply = await prisma.$transaction(async (tx) => {
+      const created = await tx.directMessage.create({
+        data: {
+          content,
+          fromUserId,
+          toUserId,
+          threadId: parentId,
+          // Self-DMs are auto-read
+          ...(fromUserId === toUserId && { readAt: new Date() }),
+        },
+      });
+
+      if (fileIds && fileIds.length > 0) {
+        const updated = await tx.file.updateMany({
+          where: { id: { in: fileIds }, userId: fromUserId, messageId: null, dmId: null },
+          data: { dmId: created.id },
+        });
+        if (updated.count !== fileIds.length) {
+          throw new Error('Invalid file IDs or files already attached');
+        }
+      }
+
+      return tx.directMessage.findUnique({
+        where: { id: created.id },
+        include: DM_INCLUDE_USERS,
+      });
     });
 
     // Broadcast to both users so the thread updates in real-time

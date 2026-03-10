@@ -155,13 +155,16 @@ model File {
   gcsPath      String?
   userId       Int
   messageId    Int?
+  dmId         Int?
   createdAt    DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
-  message   Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  user      User            @relation(fields: [userId], references: [id])
+  message   Message?        @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  dm        DirectMessage?  @relation(fields: [dmId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([messageId])
+  @@index([dmId])
 }
 
 model DirectMessage {
@@ -184,6 +187,7 @@ model DirectMessage {
   parent     DirectMessage?   @relation("DMThread", fields: [threadId], references: [id])
   replies    DirectMessage[]  @relation("DMThread")
   reactions  DMReaction[]
+  files      File[]
 
   @@index([fromUserId, toUserId])
   @@index([toUserId, fromUserId])

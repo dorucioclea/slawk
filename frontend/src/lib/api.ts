@@ -517,10 +517,10 @@ export function getConversation(userId: number, cursor?: number, around?: number
   return request<{ messages: ApiDirectMessage[]; hasMore: boolean }>(`/dms/${userId}?${params}`);
 }
 
-export function sendDM(toUserId: number, content: string) {
+export function sendDM(toUserId: number, content: string, fileIds?: number[]) {
   return request<ApiDirectMessage>('/dms', {
     method: 'POST',
-    body: JSON.stringify({ toUserId, content }),
+    body: JSON.stringify({ toUserId, content, fileIds }),
   });
 }
 
@@ -543,10 +543,10 @@ export function getDMThread(dmId: number) {
   );
 }
 
-export function replyToDM(dmId: number, content: string) {
+export function replyToDM(dmId: number, content: string, fileIds?: number[]) {
   return request<ApiDirectMessage>(`/dms/messages/${dmId}/reply`, {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, fileIds }),
   });
 }
 
