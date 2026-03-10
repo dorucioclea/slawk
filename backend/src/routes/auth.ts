@@ -65,7 +65,7 @@ router.post('/register', async (req: Request, res: Response) => {
 
     // Require invite code — no open registration (relaxed in test env for convenience)
     if (!inviteCode && !isTest) {
-      res.status(400).json({ error: 'An invite code is required to register' });
+      res.status(400).json({ error: 'An invite is required to register' });
       return;
     }
 
