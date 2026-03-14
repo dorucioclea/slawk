@@ -548,6 +548,43 @@ describe('Admin API', () => {
         const found = membersRes.body.find((m: any) => m.user.id === memberId);
         expect(found).toBeUndefined();
       });
+
+      it('should revoke channel access after admin removal', async () => {
+        // Make the channel private so non-members are blocked
+        await prisma.channel.update({
+          where: { id: channelId },
+          data: { isPrivate: true },
+        });
+
+        // Add member and send a message
+        await request(app)
+          .post(`/admin/channels/${channelId}/members`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({ userId: memberId });
+
+        await request(app)
+          .post(`/channels/${channelId}/messages`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({ content: 'Secret message' });
+
+        // Member can read messages while still a member
+        const beforeRes = await request(app)
+          .get(`/channels/${channelId}/messages`)
+          .set('Authorization', `Bearer ${memberToken}`);
+        expect(beforeRes.status).toBe(200);
+        expect(beforeRes.body.messages).toHaveLength(1);
+
+        // Admin removes the member
+        await request(app)
+          .delete(`/admin/channels/${channelId}/members/${memberId}`)
+          .set('Authorization', `Bearer ${adminToken}`);
+
+        // Removed user can no longer read messages
+        const afterRes = await request(app)
+          .get(`/channels/${channelId}/messages`)
+          .set('Authorization', `Bearer ${memberToken}`);
+        expect(afterRes.status).toBe(403);
+      });
     });
   });
 

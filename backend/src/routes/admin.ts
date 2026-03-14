@@ -613,6 +613,17 @@ router.delete('/channels/:id/members/:userId', async (req: AuthRequest, res: Res
       where: { userId_channelId: { userId, channelId } },
     });
 
+    // Evict user's sockets from the channel room so they stop receiving messages
+    const io = getIO();
+    if (io) {
+      io.to(`channel:${channelId}`).emit('channel:member-left', {
+        channelId,
+        userId,
+        memberCount: await prisma.channelMember.count({ where: { channelId } }),
+      });
+      io.in(`user:${userId}`).socketsLeave(`channel:${channelId}`);
+    }
+
     res.json({ message: 'Member removed' });
   } catch (error) {
     logError('Admin remove channel member error', error);
