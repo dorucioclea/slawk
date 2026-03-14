@@ -570,6 +570,20 @@ router.post('/channels/:id/members', async (req: AuthRequest, res: Response) => 
 
     const { userId } = addMemberSchema.parse(req.body);
 
+    // Verify user exists and is active
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, deactivatedAt: true },
+    });
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    if (user.deactivatedAt) {
+      res.status(400).json({ error: 'Cannot add a deactivated user to a channel' });
+      return;
+    }
+
     await prisma.channelMember.create({
       data: { userId, channelId },
     });

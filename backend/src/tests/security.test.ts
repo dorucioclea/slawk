@@ -464,6 +464,38 @@ describe('Security - Input Validation', () => {
     });
   });
 
+  describe('Adding deactivated users to channels', () => {
+    it('should NOT allow adding a deactivated user to a channel', async () => {
+      // Create a second user and deactivate them
+      const user2Res = await request(app).post('/auth/register').send({
+        email: 'deactivated-member@example.com',
+        password: 'password123',
+        name: 'Deactivated Member',
+      });
+      const user2Id = user2Res.body.user.id;
+
+      await prisma.user.update({
+        where: { id: user2Id },
+        data: { deactivatedAt: new Date(), tokenVersion: { increment: 1 } },
+      });
+
+      // Try to add the deactivated user to the channel
+      const res = await request(app)
+        .post(`/channels/${channelId}/members`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ userId: user2Id });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Cannot add a deactivated user to a channel');
+
+      // Verify user was not added
+      const membership = await prisma.channelMember.findUnique({
+        where: { userId_channelId: { userId: user2Id, channelId } },
+      });
+      expect(membership).toBeNull();
+    });
+  });
+
   describe('Deactivated user scheduled messages', () => {
     let adminToken: string;
     let targetToken: string;

@@ -350,10 +350,17 @@ router.post('/:id/members', authMiddleware, requireChannelMembership, async (req
       }
     }
 
-    // Check user exists
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    // Check user exists and is active
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, deactivatedAt: true },
+    });
     if (!user) {
       res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    if (user.deactivatedAt) {
+      res.status(400).json({ error: 'Cannot add a deactivated user to a channel' });
       return;
     }
 
