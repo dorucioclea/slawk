@@ -633,6 +633,21 @@ router.post('/:userId/read', authMiddleware, async (req: AuthRequest, res: Respo
       return;
     }
 
+    // Guests can only interact with shared-channel members
+    if (req.user!.role === 'GUEST' && currentUserId !== otherUserId) {
+      const sharedChannel = await prisma.$queryRaw<Array<{ id: number }>>`
+        SELECT cm1."channelId" AS id
+        FROM "ChannelMember" cm1
+        JOIN "ChannelMember" cm2 ON cm2."channelId" = cm1."channelId"
+        WHERE cm1."userId" = ${currentUserId} AND cm2."userId" = ${otherUserId}
+        LIMIT 1
+      `;
+      if (sharedChannel.length === 0) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+    }
+
     // Mark all unread messages from the other user as read
     const result = await prisma.directMessage.updateMany({
       where: {
@@ -661,6 +676,21 @@ router.post('/:userId/unread', authMiddleware, async (req: AuthRequest, res: Res
     if (!otherUserId) {
       res.status(400).json({ error: 'Invalid user ID' });
       return;
+    }
+
+    // Guests can only interact with shared-channel members
+    if (req.user!.role === 'GUEST') {
+      const sharedChannel = await prisma.$queryRaw<Array<{ id: number }>>`
+        SELECT cm1."channelId" AS id
+        FROM "ChannelMember" cm1
+        JOIN "ChannelMember" cm2 ON cm2."channelId" = cm1."channelId"
+        WHERE cm1."userId" = ${currentUserId} AND cm2."userId" = ${otherUserId}
+        LIMIT 1
+      `;
+      if (sharedChannel.length === 0) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
     }
 
     const messageId = req.body?.messageId;
@@ -749,6 +779,21 @@ router.get('/:userId/pins', authMiddleware, async (req: AuthRequest, res: Respon
     const currentUserId = req.user!.userId;
     const otherUserId = parseIntParam(req.params.userId);
     if (!otherUserId) { res.status(400).json({ error: 'Invalid user ID' }); return; }
+
+    // Guests can only view pins with shared-channel members
+    if (req.user!.role === 'GUEST' && currentUserId !== otherUserId) {
+      const sharedChannel = await prisma.$queryRaw<Array<{ id: number }>>`
+        SELECT cm1."channelId" AS id
+        FROM "ChannelMember" cm1
+        JOIN "ChannelMember" cm2 ON cm2."channelId" = cm1."channelId"
+        WHERE cm1."userId" = ${currentUserId} AND cm2."userId" = ${otherUserId}
+        LIMIT 1
+      `;
+      if (sharedChannel.length === 0) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+    }
 
     const pinned = await prisma.directMessage.findMany({
       where: {
