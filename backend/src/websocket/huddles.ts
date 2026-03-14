@@ -248,6 +248,21 @@ export function registerHuddleHandlers(
       return;
     }
 
+    // Guests can only huddle with shared-channel members
+    if (socket.user.role === 'GUEST') {
+      const sharedChannel = await prisma.$queryRaw<Array<{ id: number }>>`
+        SELECT cm1."channelId" AS id
+        FROM "ChannelMember" cm1
+        JOIN "ChannelMember" cm2 ON cm2."channelId" = cm1."channelId"
+        WHERE cm1."userId" = ${userId} AND cm2."userId" = ${toUserId}
+        LIMIT 1
+      `;
+      if (sharedChannel.length === 0) {
+        sock.emit('huddle:error', { message: 'User not found' });
+        return;
+      }
+    }
+
     // Check if target is already in a huddle
     if (userHuddleMap.has(toUserId)) {
       sock.emit('huddle:invite:cancelled', { inviteId: 'none', reason: 'busy' });
