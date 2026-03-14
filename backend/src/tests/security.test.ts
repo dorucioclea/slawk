@@ -825,6 +825,42 @@ describe('Security - Input Validation', () => {
         data: { archivedAt: null },
       });
     });
+
+    it('should NOT allow send-now of scheduled messages in archived channels', async () => {
+      // Schedule a message while channel is active
+      const futureDate = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const schedRes = await request(app)
+        .post('/messages/schedule')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'Will try send-now after archive', channelId, scheduledAt: futureDate });
+      expect(schedRes.status).toBe(201);
+      const scheduledId = schedRes.body.id;
+
+      // Archive the channel
+      await prisma.channel.update({
+        where: { id: channelId },
+        data: { archivedAt: new Date() },
+      });
+
+      // Send-now should be blocked
+      const res = await request(app)
+        .post(`/messages/scheduled/${scheduledId}/send`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('This channel has been archived');
+
+      // Verify no message was created
+      const messages = await prisma.message.findMany({
+        where: { channelId, content: 'Will try send-now after archive' },
+      });
+      expect(messages).toHaveLength(0);
+
+      await prisma.channel.update({
+        where: { id: channelId },
+        data: { archivedAt: null },
+      });
+    });
   });
 
   describe('Deactivated user scheduled messages', () => {
