@@ -570,13 +570,14 @@ export function initializeWebSocket(httpServer: HttpServer) {
 
         const isSelfDM = socket.user.userId === data.toUserId;
 
-        // Check if recipient exists (self-DM is allowed)
+        // Check if recipient exists and is active (self-DM is allowed)
         if (!isSelfDM) {
           const recipient = await prisma.user.findUnique({
             where: { id: data.toUserId },
+            select: { id: true, deactivatedAt: true },
           });
 
-          if (!recipient) {
+          if (!recipient || recipient.deactivatedAt) {
             socket.emit('error', { message: 'Unable to send message' });
             return;
           }

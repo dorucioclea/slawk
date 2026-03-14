@@ -28,13 +28,14 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const fromUserId = req.user!.userId;
     const { toUserId, content, fileIds } = sendDMSchema.parse(req.body);
 
-    // Check if recipient exists (self-DM is allowed)
+    // Check if recipient exists and is active (self-DM is allowed)
     if (fromUserId !== toUserId) {
       const recipient = await prisma.user.findUnique({
         where: { id: toUserId },
+        select: { id: true, deactivatedAt: true },
       });
 
-      if (!recipient) {
+      if (!recipient || recipient.deactivatedAt) {
         res.status(400).json({ error: 'Unable to send message' });
         return;
       }

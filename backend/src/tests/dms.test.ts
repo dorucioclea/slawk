@@ -102,6 +102,28 @@ describe('Direct Messages', () => {
 
       expect(res.status).toBe(400);
     });
+
+    it('should NOT allow sending DMs to deactivated users', async () => {
+      // Deactivate Bob directly in DB
+      await prisma.user.update({
+        where: { id: bobId },
+        data: { deactivatedAt: new Date(), tokenVersion: { increment: 1 } },
+      });
+
+      const res = await request(app)
+        .post('/dms')
+        .set('Authorization', `Bearer ${aliceToken}`)
+        .send({ toUserId: bobId, content: 'Are you there?' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Unable to send message');
+
+      // Verify no DM was created
+      const dms = await prisma.directMessage.findMany({
+        where: { fromUserId: aliceId, toUserId: bobId },
+      });
+      expect(dms).toHaveLength(0);
+    });
   });
 
   describe('GET /dms/:userId', () => {
