@@ -448,6 +448,16 @@ router.patch('/:id/members/:userId', authMiddleware, requireChannelMembership, a
     const { role } = updateMemberRoleSchema.parse(req.body);
     const actorId = req.user!.userId;
 
+    // Block role changes in archived channels
+    const roleChannel = await prisma.channel.findUnique({
+      where: { id: channelId },
+      select: { archivedAt: true },
+    });
+    if (roleChannel?.archivedAt) {
+      res.status(403).json({ error: 'This channel has been archived' });
+      return;
+    }
+
     // Get actor's channel membership
     const actorMember = await prisma.channelMember.findUnique({
       where: { userId_channelId: { userId: actorId, channelId } },

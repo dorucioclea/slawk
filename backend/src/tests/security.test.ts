@@ -659,6 +659,49 @@ describe('Security - Input Validation', () => {
         data: { archivedAt: null },
       });
     });
+
+    it('should NOT allow changing member roles in an archived channel', async () => {
+      // Create a second user and add them to the channel
+      const user2Res = await request(app).post('/auth/register').send({
+        email: 'role-archived@example.com',
+        password: 'password123',
+        name: 'Role Archived User',
+      });
+      const user2Id = user2Res.body.user.id;
+
+      // Need a channel where authToken user is OWNER
+      const chRes = await request(app)
+        .post('/channels')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ name: 'role-archive-test' });
+      const roleChannelId = chRes.body.id;
+
+      await request(app)
+        .post(`/channels/${roleChannelId}/members`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ userId: user2Id });
+
+      // Archive the channel
+      await prisma.channel.update({
+        where: { id: roleChannelId },
+        data: { archivedAt: new Date() },
+      });
+
+      // Try to change the member's role — should be blocked
+      const res = await request(app)
+        .patch(`/channels/${roleChannelId}/members/${user2Id}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ role: 'MODERATOR' });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('This channel has been archived');
+
+      // Verify role wasn't changed
+      const member = await prisma.channelMember.findUnique({
+        where: { userId_channelId: { userId: user2Id, channelId: roleChannelId } },
+      });
+      expect(member!.role).toBe('MEMBER');
+    });
   });
 
   describe('Archived channel edit/delete bypass', () => {
