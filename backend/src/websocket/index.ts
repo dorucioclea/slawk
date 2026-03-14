@@ -158,7 +158,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
     const users = connectedUserIds.length > 0
       ? await prisma.user.findMany({
           where: { id: { in: connectedUserIds } },
-          select: { id: true, tokenVersion: true, deactivatedAt: true },
+          select: { id: true, tokenVersion: true, role: true, deactivatedAt: true },
         })
       : [];
     const userMap = new Map(users.map(u => [u.id, u]));
@@ -181,6 +181,11 @@ export function initializeWebSocket(httpServer: HttpServer) {
           if (decoded.tokenVersion !== undefined && dbUser.tokenVersion !== decoded.tokenVersion) {
             authSocket.emit('error', { message: 'Session revoked' });
             authSocket.disconnect(true);
+            continue;
+          }
+          // Refresh role on socket to reflect admin role changes
+          if (authSocket.user && authSocket.user.role !== dbUser.role) {
+            authSocket.user = { ...authSocket.user, role: dbUser.role };
           }
         }
       } catch {
