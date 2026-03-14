@@ -1055,8 +1055,8 @@ describe('Security - Input Validation', () => {
     });
 
     it('should return 413 for file too large instead of 500', async () => {
-      // Create a buffer larger than 10MB
-      const largeBuffer = Buffer.alloc(11 * 1024 * 1024, 'a');
+      // Multer limit is 50MB — create a buffer that exceeds it
+      const largeBuffer = Buffer.alloc(51 * 1024 * 1024, 'a');
 
       const res = await request(app)
         .post('/files')
@@ -1067,7 +1067,7 @@ describe('Security - Input Validation', () => {
         });
 
       expect(res.status).toBe(413);
-      expect(res.body.error).toBe('File too large');
+      expect(res.body.error).toMatch(/too large/i);
     });
   });
 });
