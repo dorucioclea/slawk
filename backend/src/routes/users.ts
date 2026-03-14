@@ -383,6 +383,21 @@ router.get('/:id/presence', authMiddleware, async (req: AuthRequest, res: Respon
       return;
     }
 
+    // Guests can only check presence of shared-channel members
+    if (req.user!.role === 'GUEST' && userId !== req.user!.userId) {
+      const sharedChannel = await prisma.$queryRaw<Array<{ id: number }>>`
+        SELECT cm1."channelId" AS id
+        FROM "ChannelMember" cm1
+        JOIN "ChannelMember" cm2 ON cm2."channelId" = cm1."channelId"
+        WHERE cm1."userId" = ${req.user!.userId} AND cm2."userId" = ${userId}
+        LIMIT 1
+      `;
+      if (sharedChannel.length === 0) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+    }
+
     // Check real-time online status from WebSocket connections
     const isOnline = isUserOnline(userId);
 

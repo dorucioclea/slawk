@@ -815,6 +815,12 @@ describe('Admin API', () => {
         .get(`/users/${isolatedId}`)
         .set('Authorization', `Bearer ${guestToken}`);
       expect(profileRes.status).toBe(404);
+
+      // Guest tries to check presence by ID — should be blocked
+      const presenceRes = await request(app)
+        .get(`/users/${isolatedId}/presence`)
+        .set('Authorization', `Bearer ${guestToken}`);
+      expect(presenceRes.status).toBe(404);
     });
 
     it('should prevent guest from reading public channels they are not a member of', async () => {
