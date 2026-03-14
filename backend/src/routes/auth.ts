@@ -17,7 +17,7 @@ function stripHtml(str: string): string {
 }
 
 const registerSchema = z.object({
-  email: z.string().email().max(255),
+  email: z.string().email().max(255).transform(e => e.toLowerCase()),
   password: z.string().min(6).max(72),
   name: z.string().min(1).max(100)
     .refine(val => !val.includes('\u0000'), { message: 'Name cannot contain null bytes' })
@@ -26,7 +26,7 @@ const registerSchema = z.object({
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().transform(e => e.toLowerCase()),
   password: z.string().min(1).max(72),
 });
 

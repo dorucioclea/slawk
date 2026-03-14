@@ -42,6 +42,29 @@ describe('Authentication', () => {
       expect(res.body.error).toBe('Unable to complete registration');
     });
 
+    it('should treat emails as case-insensitive', async () => {
+      // Register with lowercase
+      await request(app).post('/auth/register').send(testUser);
+
+      // Try to register with uppercase variant — should fail (same email)
+      const res = await request(app)
+        .post('/auth/register')
+        .send({ ...testUser, email: testUser.email.toUpperCase() });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('should allow login with different email casing', async () => {
+      await request(app).post('/auth/register').send(testUser);
+
+      const res = await request(app)
+        .post('/auth/login')
+        .send({ email: testUser.email.toUpperCase(), password: testUser.password });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('token');
+    });
+
     it('should validate email format', async () => {
       const res = await request(app)
         .post('/auth/register')
