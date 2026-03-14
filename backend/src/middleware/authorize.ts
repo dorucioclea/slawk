@@ -241,7 +241,7 @@ export async function requirePublicChannelReadAccess(
     return;
   }
 
-  if (!membership && channel.isPrivate) {
+  if (!membership && (channel.isPrivate || req.user!.role === 'GUEST')) {
     res.status(403).json({ error: 'You must be a member of this channel' });
     return;
   }
@@ -291,7 +291,7 @@ export async function requirePublicMessageReadAccess(
     return;
   }
 
-  if (!membership && channel.isPrivate) {
+  if (!membership && (channel.isPrivate || req.user!.role === 'GUEST')) {
     res.status(403).json({ error: 'You must be a member of this channel' });
     return;
   }

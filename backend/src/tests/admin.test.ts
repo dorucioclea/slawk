@@ -712,6 +712,33 @@ describe('Admin API', () => {
       expect(res.status).toBe(403);
     });
 
+    it('should prevent guest from reading public channels they are not a member of', async () => {
+      // Create a public channel as admin
+      const chRes = await request(app)
+        .post('/channels')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: 'guest-blocked-public' });
+      const publicChannelId = chRes.body.id;
+
+      // Send a message in it
+      await request(app)
+        .post(`/channels/${publicChannelId}/messages`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ content: 'Not for guests' });
+
+      // Guest should not be able to view channel details
+      const detailRes = await request(app)
+        .get(`/channels/${publicChannelId}`)
+        .set('Authorization', `Bearer ${guestToken}`);
+      expect(detailRes.status).toBe(404);
+
+      // Guest should not be able to read messages
+      const msgRes = await request(app)
+        .get(`/channels/${publicChannelId}/messages`)
+        .set('Authorization', `Bearer ${guestToken}`);
+      expect(msgRes.status).toBe(403);
+    });
+
     it('should NOT allow transferring ownership to a guest', async () => {
       // Promote admin to OWNER
       await prisma.user.update({

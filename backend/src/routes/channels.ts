@@ -171,8 +171,8 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
 
     const isMember = channel.members.some(m => m.userId === userId);
 
-    // Check access for private channels
-    if (channel.isPrivate && !isMember) {
+    // Check access: private channels require membership; guests can only access their own channels
+    if (!isMember && (channel.isPrivate || req.user!.role === 'GUEST')) {
       res.status(404).json({ error: 'Channel not found' });
       return;
     }
