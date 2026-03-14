@@ -14,7 +14,7 @@ const router = Router();
 const replySchema = z.object({
   content: z.string().min(1).max(4000)
     .refine(val => !val.includes('\u0000'), { message: 'Content cannot contain null bytes' }),
-  fileIds: z.array(z.number()).max(10).optional(),
+  fileIds: z.array(z.number().int().positive()).max(10).optional(),
 });
 
 const editMessageSchema = z.object({

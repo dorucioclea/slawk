@@ -16,7 +16,7 @@ const sendDMSchema = z.object({
   toUserId: z.number().int().positive(),
   content: z.string().max(4000)
     .refine(val => !val.includes('\u0000'), { message: 'Content cannot contain null bytes' }),
-  fileIds: z.array(z.number()).max(10).optional(),
+  fileIds: z.array(z.number().int().positive()).max(10).optional(),
 }).refine(
   (data) => (data.content?.trim().length ?? 0) > 0 || (data.fileIds && data.fileIds.length > 0),
   { message: 'Message must have content or file attachments' },
@@ -296,7 +296,7 @@ router.post('/messages/:id/reply', authMiddleware, requireDmAccess, async (req: 
     const replySchema = z.object({
       content: z.string().max(4000)
         .refine(val => !val.includes('\u0000'), { message: 'Content cannot contain null bytes' }),
-      fileIds: z.array(z.number()).max(10).optional(),
+      fileIds: z.array(z.number().int().positive()).max(10).optional(),
     }).refine(
       (data) => (data.content?.trim().length ?? 0) > 0 || (data.fileIds && data.fileIds.length > 0),
       { message: 'Reply must have content or file attachments' },
@@ -312,7 +312,7 @@ router.post('/messages/:id/reply', authMiddleware, requireDmAccess, async (req: 
         where: { id: toUserId },
         select: { id: true, deactivatedAt: true },
       });
-      if (recipient?.deactivatedAt) {
+      if (!recipient || recipient.deactivatedAt) {
         res.status(400).json({ error: 'Unable to send message' });
         return;
       }
