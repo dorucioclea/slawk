@@ -130,7 +130,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
       // Verify tokenVersion against DB to reject revoked/outdated tokens
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId },
-        select: { tokenVersion: true, deactivatedAt: true },
+        select: { tokenVersion: true, role: true, deactivatedAt: true },
       });
       if (!user || user.deactivatedAt) {
         return next(new Error('Invalid token'));
@@ -139,7 +139,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
         return next(new Error('Invalid token'));
       }
 
-      socket.user = decoded;
+      socket.user = { ...decoded, role: user.role };
       next();
     } catch (error) {
       next(new Error('Invalid token'));
