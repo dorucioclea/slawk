@@ -809,6 +809,12 @@ describe('Admin API', () => {
         .get(`/dms/${isolatedId}`)
         .set('Authorization', `Bearer ${guestToken}`);
       expect(convRes.status).toBe(404);
+
+      // Guest tries to view user profile by ID — should be blocked
+      const profileRes = await request(app)
+        .get(`/users/${isolatedId}`)
+        .set('Authorization', `Bearer ${guestToken}`);
+      expect(profileRes.status).toBe(404);
     });
 
     it('should prevent guest from reading public channels they are not a member of', async () => {
