@@ -704,6 +704,39 @@ describe('Admin API', () => {
       expect(res.status).toBe(403);
     });
 
+    it('should prevent regular members from adding guests to channels', async () => {
+      // Get the guest user
+      const guest = await prisma.user.findFirst({ where: { email: 'guest@example.com' } });
+
+      // Create a channel as a regular member (memberToken)
+      const chRes = await request(app)
+        .post('/channels')
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({ name: 'member-channel' });
+
+      // Regular member tries to add guest — should be blocked
+      const res = await request(app)
+        .post(`/channels/${chRes.body.id}/members`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({ userId: guest!.id });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('Only workspace admins can add guest users to channels');
+
+      // Admin CAN add the guest
+      // First join the channel as admin
+      await request(app)
+        .post(`/channels/${chRes.body.id}/join`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const adminRes = await request(app)
+        .post(`/channels/${chRes.body.id}/members`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ userId: guest!.id });
+
+      expect(adminRes.status).toBe(200);
+    });
+
     it('should prevent guest from accessing admin routes', async () => {
       const res = await request(app)
         .get('/admin/users')

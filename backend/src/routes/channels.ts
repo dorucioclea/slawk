@@ -373,7 +373,7 @@ router.post('/:id/members', authMiddleware, requireChannelMembership, async (req
     // Check user exists and is active
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, deactivatedAt: true },
+      select: { id: true, role: true, deactivatedAt: true },
     });
     if (!user) {
       res.status(404).json({ error: 'User not found' });
@@ -381,6 +381,13 @@ router.post('/:id/members', authMiddleware, requireChannelMembership, async (req
     }
     if (user.deactivatedAt) {
       res.status(400).json({ error: 'Cannot add a deactivated user to a channel' });
+      return;
+    }
+
+    // Only admins/owners can add guest users to channels (prevents
+    // regular members from expanding guest access beyond admin intent)
+    if (user.role === 'GUEST' && req.user!.role !== 'ADMIN' && req.user!.role !== 'OWNER') {
+      res.status(403).json({ error: 'Only workspace admins can add guest users to channels' });
       return;
     }
 
