@@ -220,4 +220,48 @@ describe('Authentication', () => {
       expect(newTokenRes.status).toBe(200);
     });
   });
+
+  describe('Auth error message uniformity', () => {
+    it('should return the same error for revoked and deactivated tokens', async () => {
+      // Register and get token
+      const regRes = await request(app).post('/auth/register').send(testUser);
+      const token = regRes.body.token;
+
+      // Revoke by changing password (increments tokenVersion)
+      await request(app)
+        .post('/auth/change-password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ currentPassword: testUser.password, newPassword: 'changed123' });
+
+      // Revoked token
+      const revokedRes = await request(app)
+        .get('/users/me')
+        .set('Authorization', `Bearer ${token}`);
+
+      // Register a second user and deactivate them
+      const user2Res = await request(app).post('/auth/register').send({
+        email: 'deact-error@example.com',
+        password: 'password123',
+        name: 'Deact Error User',
+      });
+      const user2Token = user2Res.body.token;
+      await prisma.user.update({
+        where: { id: user2Res.body.user.id },
+        data: { deactivatedAt: new Date() },
+      });
+
+      // Deactivated token
+      const deactRes = await request(app)
+        .get('/users/me')
+        .set('Authorization', `Bearer ${user2Token}`);
+
+      // Both should return 401 with the same generic message
+      expect(revokedRes.status).toBe(401);
+      expect(deactRes.status).toBe(401);
+      expect(revokedRes.body.error).toBe('Invalid token');
+      expect(deactRes.body.error).toBe('Invalid token');
+      // Same message — attacker can't distinguish the reason
+      expect(revokedRes.body.error).toBe(deactRes.body.error);
+    });
+  });
 });
