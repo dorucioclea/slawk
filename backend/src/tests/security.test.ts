@@ -464,6 +464,71 @@ describe('Security - Input Validation', () => {
     });
   });
 
+  describe('Archived channel edit/delete bypass', () => {
+    it('should NOT allow editing messages in archived channels', async () => {
+      const msgRes = await request(app)
+        .post(`/channels/${channelId}/messages`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'Original content' });
+      const msgId = msgRes.body.id;
+
+      // Archive the channel
+      await prisma.channel.update({
+        where: { id: channelId },
+        data: { archivedAt: new Date() },
+      });
+
+      // Edit should be blocked
+      const editRes = await request(app)
+        .patch(`/messages/${msgId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'Tampered content' });
+      expect(editRes.status).toBe(403);
+      expect(editRes.body.error).toBe('This channel has been archived');
+
+      // Verify original content is unchanged
+      const msg = await prisma.message.findUnique({ where: { id: msgId } });
+      expect(msg!.content).toBe('Original content');
+
+      // Unarchive for cleanup
+      await prisma.channel.update({
+        where: { id: channelId },
+        data: { archivedAt: null },
+      });
+    });
+
+    it('should NOT allow deleting messages in archived channels', async () => {
+      const msgRes = await request(app)
+        .post(`/channels/${channelId}/messages`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'Preserved content' });
+      const msgId = msgRes.body.id;
+
+      // Archive the channel
+      await prisma.channel.update({
+        where: { id: channelId },
+        data: { archivedAt: new Date() },
+      });
+
+      // Delete should be blocked
+      const delRes = await request(app)
+        .delete(`/messages/${msgId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(delRes.status).toBe(403);
+      expect(delRes.body.error).toBe('This channel has been archived');
+
+      // Verify message still exists
+      const msg = await prisma.message.findUnique({ where: { id: msgId } });
+      expect(msg!.deletedAt).toBeNull();
+
+      // Unarchive for cleanup
+      await prisma.channel.update({
+        where: { id: channelId },
+        data: { archivedAt: null },
+      });
+    });
+  });
+
   describe('Archived channel thread reply bypass', () => {
     it('should NOT allow thread replies in archived channels', async () => {
       // Send a message to create a thread parent

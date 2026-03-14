@@ -389,6 +389,16 @@ export function initializeWebSocket(httpServer: HttpServer) {
           return;
         }
 
+        // Block edits in archived channels
+        const editChannel = await prisma.channel.findUnique({
+          where: { id: message.channelId },
+          select: { archivedAt: true },
+        });
+        if (editChannel?.archivedAt) {
+          socket.emit('error', { message: 'This channel has been archived' });
+          return;
+        }
+
         const updatedMessage = await prisma.message.update({
           where: { id: data.messageId },
           data: { content: data.content, editedAt: new Date() },
@@ -435,6 +445,16 @@ export function initializeWebSocket(httpServer: HttpServer) {
 
         if (message.userId !== socket.user.userId) {
           socket.emit('error', { message: 'You can only delete your own messages' });
+          return;
+        }
+
+        // Block deletes in archived channels
+        const delChannel = await prisma.channel.findUnique({
+          where: { id: message.channelId },
+          select: { archivedAt: true },
+        });
+        if (delChannel?.archivedAt) {
+          socket.emit('error', { message: 'This channel has been archived' });
           return;
         }
 

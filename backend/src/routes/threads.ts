@@ -134,6 +134,16 @@ router.patch('/:id', authMiddleware, requireMessageAccess, async (req: AuthReque
       return;
     }
 
+    // Block edits in archived channels
+    const channel = await prisma.channel.findUnique({
+      where: { id: message.channelId },
+      select: { archivedAt: true },
+    });
+    if (channel?.archivedAt) {
+      res.status(403).json({ error: 'This channel has been archived' });
+      return;
+    }
+
     const updatedMessage = await prisma.message.update({
       where: { id: messageId },
       data: { content, editedAt: new Date() },
@@ -163,6 +173,16 @@ router.delete('/:id', authMiddleware, requireMessageAccess, async (req: AuthRequ
 
     if (message.userId !== userId) {
       res.status(403).json({ error: 'You can only delete your own messages' });
+      return;
+    }
+
+    // Block deletes in archived channels
+    const channel = await prisma.channel.findUnique({
+      where: { id: message.channelId },
+      select: { archivedAt: true },
+    });
+    if (channel?.archivedAt) {
+      res.status(403).json({ error: 'This channel has been archived' });
       return;
     }
 
