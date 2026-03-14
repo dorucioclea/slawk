@@ -464,6 +464,63 @@ describe('Security - Input Validation', () => {
     });
   });
 
+  describe('Archived channel reaction bypass', () => {
+    it('should NOT allow adding reactions in archived channels', async () => {
+      const msgRes = await request(app)
+        .post(`/channels/${channelId}/messages`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'React to me' });
+      const msgId = msgRes.body.id;
+
+      await prisma.channel.update({
+        where: { id: channelId },
+        data: { archivedAt: new Date() },
+      });
+
+      const res = await request(app)
+        .post(`/messages/${msgId}/reactions`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ emoji: 'thumbsup' });
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('This channel has been archived');
+
+      await prisma.channel.update({
+        where: { id: channelId },
+        data: { archivedAt: null },
+      });
+    });
+
+    it('should NOT allow removing reactions in archived channels', async () => {
+      const msgRes = await request(app)
+        .post(`/channels/${channelId}/messages`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'Reacted before archive' });
+      const msgId = msgRes.body.id;
+
+      // Add reaction before archiving
+      await request(app)
+        .post(`/messages/${msgId}/reactions`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ emoji: 'thumbsup' });
+
+      await prisma.channel.update({
+        where: { id: channelId },
+        data: { archivedAt: new Date() },
+      });
+
+      const res = await request(app)
+        .delete(`/messages/${msgId}/reactions/thumbsup`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('This channel has been archived');
+
+      await prisma.channel.update({
+        where: { id: channelId },
+        data: { archivedAt: null },
+      });
+    });
+  });
+
   describe('Archived channel pin/unpin bypass', () => {
     it('should NOT allow pinning messages in archived channels', async () => {
       const msgRes = await request(app)
