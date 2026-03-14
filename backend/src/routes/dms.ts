@@ -151,8 +151,23 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       ORDER BY lm."createdAt" DESC NULLS LAST
     `;
 
+    // Guests: filter conversations to only shared-channel members
+    let filteredConversations = conversations;
+    if (req.user!.role === 'GUEST') {
+      const sharedMembers = await prisma.$queryRaw<Array<{ userId: number }>>`
+        SELECT DISTINCT cm2."userId"
+        FROM "ChannelMember" cm1
+        JOIN "ChannelMember" cm2 ON cm2."channelId" = cm1."channelId" AND cm2."userId" != cm1."userId"
+        WHERE cm1."userId" = ${userId}
+      `;
+      const sharedIds = new Set(sharedMembers.map(m => m.userId));
+      filteredConversations = conversations.filter(
+        (conv: any) => conv.otherUser && sharedIds.has(conv.otherUser.id)
+      );
+    }
+
     // Apply online status from WebSocket tracking
-    const result = conversations.map((conv) => ({
+    const result = filteredConversations.map((conv) => ({
       otherUser: conv.otherUser ? {
         ...conv.otherUser,
         status: isUserOnline(conv.otherUser.id) ? 'online' : 'offline',
