@@ -92,6 +92,29 @@ describe('File Uploads', () => {
       expect(res.body.messageId).toBe(messageId);
     });
 
+    it('should NOT upload file to a message in an archived channel', async () => {
+      // Archive the channel
+      await prisma.channel.update({
+        where: { id: channelId },
+        data: { archivedAt: new Date() },
+      });
+
+      const res = await request(app)
+        .post('/files')
+        .set('Authorization', `Bearer ${authToken}`)
+        .field('messageId', messageId.toString())
+        .attach('file', testFilePath);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('This channel has been archived');
+
+      // Unarchive for cleanup
+      await prisma.channel.update({
+        where: { id: channelId },
+        data: { archivedAt: null },
+      });
+    });
+
     it('should NOT upload file to a deleted message', async () => {
       // Delete the message
       await request(app)

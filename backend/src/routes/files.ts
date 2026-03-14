@@ -211,15 +211,27 @@ router.post('/', authMiddleware, uploadLimiter, (req: AuthRequest, res: Response
         return;
       }
 
-      const membership = await prisma.channelMember.findUnique({
-        where: {
-          userId_channelId: { userId, channelId: message.channelId },
-        },
-      });
+      const [membership, channel] = await Promise.all([
+        prisma.channelMember.findUnique({
+          where: {
+            userId_channelId: { userId, channelId: message.channelId },
+          },
+        }),
+        prisma.channel.findUnique({
+          where: { id: message.channelId },
+          select: { archivedAt: true },
+        }),
+      ]);
 
       if (!membership) {
         fs.unlinkSync(file.path);
         res.status(403).json({ error: 'You must be a member of the channel' });
+        return;
+      }
+
+      if (channel?.archivedAt) {
+        fs.unlinkSync(file.path);
+        res.status(403).json({ error: 'This channel has been archived' });
         return;
       }
     }
