@@ -17,8 +17,8 @@ const createMessageSchema = z.object({
       (val) => !val.includes('\u0000'),
       { message: 'Message content cannot contain null bytes' }
     ),
-  threadId: z.number().optional(),
-  fileIds: z.array(z.number()).max(10).optional(),
+  threadId: z.number().int().positive().optional(),
+  fileIds: z.array(z.number().int().positive()).max(10).optional(),
 }).refine(
   (data) => (data.content?.trim().length ?? 0) > 0 || (data.fileIds && data.fileIds.length > 0),
   { message: 'Message must have content or file attachments' },

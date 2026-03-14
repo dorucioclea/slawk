@@ -197,6 +197,33 @@ describe('Messages', () => {
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('Thread parent must belong to the same channel');
     });
+
+    it('should reject threadId: 0 (validation bypass)', async () => {
+      const res = await request(app)
+        .post(`/channels/${channelId}/messages`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'Zero threadId', threadId: 0 });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('should reject non-integer threadId', async () => {
+      const res = await request(app)
+        .post(`/channels/${channelId}/messages`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'Float threadId', threadId: 1.5 });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('should reject negative threadId', async () => {
+      const res = await request(app)
+        .post(`/channels/${channelId}/messages`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'Negative threadId', threadId: -1 });
+
+      expect(res.status).toBe(400);
+    });
   });
 
   describe('GET /search', () => {
