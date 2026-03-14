@@ -607,6 +607,21 @@ export function initializeWebSocket(httpServer: HttpServer) {
             socket.emit('error', { message: 'Unable to send message' });
             return;
           }
+
+          // Guests can only DM users who share a channel with them
+          if (socket.user!.role === 'GUEST') {
+            const sharedChannel = await prisma.$queryRaw<Array<{ id: number }>>`
+              SELECT cm1."channelId" AS id
+              FROM "ChannelMember" cm1
+              JOIN "ChannelMember" cm2 ON cm2."channelId" = cm1."channelId"
+              WHERE cm1."userId" = ${socket.user!.userId} AND cm2."userId" = ${data.toUserId}
+              LIMIT 1
+            `;
+            if (sharedChannel.length === 0) {
+              socket.emit('error', { message: 'Unable to send message' });
+              return;
+            }
+          }
         }
 
         const dm = await prisma.directMessage.create({
