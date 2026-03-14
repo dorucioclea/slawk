@@ -589,7 +589,7 @@ router.post('/channels/:id/members', async (req: AuthRequest, res: Response) => 
     });
 
     const channel = await prisma.channel.findUnique({ where: { id: channelId }, select: { name: true } });
-    writeAuditLog({
+    await writeAuditLog({
       action: 'channel.member_added',
       actorId: req.user!.userId,
       targetType: 'channel',
@@ -636,7 +636,7 @@ router.delete('/channels/:id/members/:userId', async (req: AuthRequest, res: Res
       io.in(`user:${userId}`).socketsLeave(`channel:${channelId}`);
     }
 
-    writeAuditLog({
+    await writeAuditLog({
       action: 'channel.member_removed',
       actorId: req.user!.userId,
       targetType: 'channel',
