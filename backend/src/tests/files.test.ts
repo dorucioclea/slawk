@@ -237,7 +237,7 @@ describe('File Uploads', () => {
       expect(getRes.status).toBe(200);
     });
 
-    it('should not delete another user file', async () => {
+    it('should not delete another user file (returns 404 to hide existence)', async () => {
       const user2Res = await request(app).post('/auth/register').send({
         email: 'user2@example.com',
         password: 'password123',
@@ -248,7 +248,9 @@ describe('File Uploads', () => {
         .delete(`/files/${fileId}`)
         .set('Authorization', `Bearer ${user2Res.body.token}`);
 
-      expect(res.status).toBe(403);
+      // Returns 404 (not 403) so attackers can't distinguish
+      // "exists but unauthorized" from "doesn't exist"
+      expect(res.status).toBe(404);
     });
   });
 
@@ -568,11 +570,12 @@ describe('File Uploads', () => {
         .set('Authorization', `Bearer ${aliceToken}`)
         .send({ toUserId: bobId, content: 'Private file', fileIds: [fileId] });
 
-      // Eve (not a DM participant) should be denied
+      // Eve (not a DM participant) gets 404 — same as non-existent
+      // to prevent file-existence enumeration
       const fileRes = await request(app)
         .get(`/files/${fileId}`)
         .set('Authorization', `Bearer ${eveToken}`);
-      expect(fileRes.status).toBe(403);
+      expect(fileRes.status).toBe(404);
     });
 
     it('should deny access to files in deleted DMs', async () => {
@@ -599,6 +602,82 @@ describe('File Uploads', () => {
         .get(`/files/${fileId}`)
         .set('Authorization', `Bearer ${bobToken}`);
       expect(fileRes.status).toBe(404);
+    });
+  });
+
+  describe('File existence enumeration prevention', () => {
+    let ownerToken: string;
+    let attackerToken: string;
+
+    beforeEach(async () => {
+      await prisma.dMReaction.deleteMany();
+      await prisma.reaction.deleteMany();
+      await prisma.file.deleteMany();
+      await prisma.directMessage.deleteMany();
+      await prisma.message.deleteMany();
+      await prisma.channelRead.deleteMany();
+      await prisma.channelMember.deleteMany();
+      await prisma.channel.deleteMany();
+      await prisma.user.deleteMany();
+
+      const ownerRes = await request(app).post('/auth/register').send({
+        email: 'owner-enum@example.com',
+        password: 'password123',
+        name: 'Owner',
+      });
+      ownerToken = ownerRes.body.token;
+
+      const attackerRes = await request(app).post('/auth/register').send({
+        email: 'attacker-enum@example.com',
+        password: 'password123',
+        name: 'Attacker',
+      });
+      attackerToken = attackerRes.body.token;
+    });
+
+    it('should return identical 404 for non-existent and unauthorized files', async () => {
+      // Owner uploads a file (it exists)
+      const uploadRes = await request(app)
+        .post('/files')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .attach('file', testFilePath);
+      expect(uploadRes.status).toBe(201);
+      const existingFileId = uploadRes.body.id;
+
+      // Attacker probes: existing file they don't own
+      const existingRes = await request(app)
+        .get(`/files/${existingFileId}`)
+        .set('Authorization', `Bearer ${attackerToken}`);
+
+      // Attacker probes: non-existent file
+      const nonExistentRes = await request(app)
+        .get(`/files/${existingFileId + 9999}`)
+        .set('Authorization', `Bearer ${attackerToken}`);
+
+      // Both must return the same status and error to prevent enumeration
+      expect(existingRes.status).toBe(404);
+      expect(nonExistentRes.status).toBe(404);
+      expect(existingRes.body.error).toBe(nonExistentRes.body.error);
+    });
+
+    it('should return identical 404 for delete on non-existent and unauthorized files', async () => {
+      const uploadRes = await request(app)
+        .post('/files')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .attach('file', testFilePath);
+      const existingFileId = uploadRes.body.id;
+
+      const existingRes = await request(app)
+        .delete(`/files/${existingFileId}`)
+        .set('Authorization', `Bearer ${attackerToken}`);
+
+      const nonExistentRes = await request(app)
+        .delete(`/files/${existingFileId + 9999}`)
+        .set('Authorization', `Bearer ${attackerToken}`);
+
+      expect(existingRes.status).toBe(404);
+      expect(nonExistentRes.status).toBe(404);
+      expect(existingRes.body.error).toBe(nonExistentRes.body.error);
     });
   });
 });

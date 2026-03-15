@@ -123,7 +123,9 @@ export async function requireFileAccess(
     });
 
     if (!membership) {
-      res.status(403).json({ error: 'You must be a member of this channel' });
+      // Return 404 (not 403) to prevent file-existence enumeration.
+      // Same pattern used for private channel access (channels.ts).
+      res.status(404).json({ error: 'File not found' });
       return;
     }
   } else if (file.dmId) {
@@ -138,13 +140,13 @@ export async function requireFileAccess(
     }
 
     if (dm.fromUserId !== userId && dm.toUserId !== userId) {
-      res.status(403).json({ error: 'Access denied' });
+      res.status(404).json({ error: 'File not found' });
       return;
     }
   } else {
     // Unattached file — only the owner can access it
     if (file.userId !== userId) {
-      res.status(403).json({ error: 'Access denied' });
+      res.status(404).json({ error: 'File not found' });
       return;
     }
   }

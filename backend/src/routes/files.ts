@@ -460,7 +460,8 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
     }
 
     if (file.userId !== userId) {
-      res.status(403).json({ error: 'You can only delete your own files' });
+      // Return 404 (not 403) to prevent file-existence enumeration
+      res.status(404).json({ error: 'File not found' });
       return;
     }
 
