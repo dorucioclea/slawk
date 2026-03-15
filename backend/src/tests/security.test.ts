@@ -906,6 +906,48 @@ describe('Security - Input Validation', () => {
     });
   });
 
+  describe('Scheduled message send-now after member removal (TOCTOU)', () => {
+    it('should NOT create a message if user is removed from channel between check and send', async () => {
+      // Schedule a message while the user IS a channel member
+      const futureDate = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const schedRes = await request(app)
+        .post('/messages/schedule')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'TOCTOU test message', channelId, scheduledAt: futureDate });
+      expect(schedRes.status).toBe(201);
+      const scheduledId = schedRes.body.id;
+
+      // Remove the user from the channel (simulates the race: removal
+      // happens after the pre-check but before the transaction)
+      await prisma.channelMember.deleteMany({ where: { userId: schedRes.body.userId } });
+
+      // Attempt send-now — the authorization check inside the transaction
+      // should catch this even though no pre-check middleware runs
+      const sendRes = await request(app)
+        .post(`/messages/scheduled/${scheduledId}/send`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(sendRes.status).toBe(403);
+      expect(sendRes.body.error).toBe('You are no longer a member of the channel');
+
+      // Verify no message was created in the channel
+      const messages = await prisma.message.findMany({
+        where: { channelId, content: 'TOCTOU test message' },
+      });
+      expect(messages).toHaveLength(0);
+
+      // Verify the scheduled message was NOT marked as sent (still pending
+      // so it can be retried if the user re-joins)
+      const pending = await prisma.scheduledMessage.findUnique({ where: { id: scheduledId } });
+      expect(pending!.sent).toBe(false);
+
+      // Re-add user for cleanup (other tests depend on membership)
+      await prisma.channelMember.create({
+        data: { userId: schedRes.body.userId, channelId },
+      });
+    });
+  });
+
   describe('Deactivated user scheduled messages', () => {
     let adminToken: string;
     let targetToken: string;
