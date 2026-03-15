@@ -330,4 +330,59 @@ describe('Authentication', () => {
       expect(revokedRes.body.error).toBe(deactRes.body.error);
     });
   });
+
+  describe('Password change brute-force protection', () => {
+    let token: string;
+
+    beforeEach(async () => {
+      const regRes = await request(app).post('/auth/register').send(testUser);
+      token = regRes.body.token;
+    });
+
+    it('should lock out after 5 consecutive wrong current-password attempts', async () => {
+      // Make 5 wrong guesses
+      for (let i = 0; i < 5; i++) {
+        const res = await request(app)
+          .post('/auth/change-password')
+          .set('Authorization', `Bearer ${token}`)
+          .send({ currentPassword: `wrong-${i}`, newPassword: 'newpass123' });
+        expect(res.status).toBe(401);
+      }
+
+      // 6th attempt should be locked out (429), even with the correct password
+      const lockedRes = await request(app)
+        .post('/auth/change-password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ currentPassword: testUser.password, newPassword: 'newpass123' });
+      expect(lockedRes.status).toBe(429);
+      expect(lockedRes.body.error).toMatch(/too many/i);
+    });
+
+    it('should clear lockout counter on successful password change', async () => {
+      // Make 4 wrong guesses (below lockout threshold)
+      for (let i = 0; i < 4; i++) {
+        await request(app)
+          .post('/auth/change-password')
+          .set('Authorization', `Bearer ${token}`)
+          .send({ currentPassword: `wrong-${i}`, newPassword: 'newpass123' });
+      }
+
+      // Succeed on the 5th attempt
+      const successRes = await request(app)
+        .post('/auth/change-password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ currentPassword: testUser.password, newPassword: 'newpass123' });
+      expect(successRes.status).toBe(200);
+      const newToken = successRes.body.token;
+
+      // Counter should be cleared — 4 more wrong guesses should NOT trigger lockout
+      for (let i = 0; i < 4; i++) {
+        const res = await request(app)
+          .post('/auth/change-password')
+          .set('Authorization', `Bearer ${newToken}`)
+          .send({ currentPassword: `wrong-${i}`, newPassword: 'anotherpass123' });
+        expect(res.status).toBe(401); // rejected but not locked
+      }
+    });
+  });
 });

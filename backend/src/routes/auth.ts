@@ -284,10 +284,36 @@ const changePasswordSchema = z.object({
   newPassword: z.string().min(6).max(72),
 });
 
+// Brute-force protection for password change (keyed on userId, not email,
+// since this endpoint is authenticated).  Without this, an attacker with
+// a stolen JWT can dictionary-attack the currentPassword at 120 req/min.
+const passwordChangeAttempts = new Map<number, { count: number; lockedUntil: number; lastAttempt: number }>();
+const MAX_PW_CHANGE_ATTEMPTS = 5;
+const PW_CHANGE_LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [uid, entry] of passwordChangeAttempts) {
+    if (
+      (entry.lockedUntil > 0 && entry.lockedUntil < now) ||
+      (entry.lockedUntil === 0 && (now - entry.lastAttempt) > PW_CHANGE_LOCKOUT_MS)
+    ) {
+      passwordChangeAttempts.delete(uid);
+    }
+  }
+}, 5 * 60 * 1000).unref();
+
 router.post('/change-password', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+
+    // Check lockout before any DB or bcrypt work
+    const pwAttempts = passwordChangeAttempts.get(userId);
+    if (pwAttempts && pwAttempts.lockedUntil > Date.now()) {
+      res.status(429).json({ error: 'Too many failed attempts. Try again later.' });
+      return;
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -300,9 +326,22 @@ router.post('/change-password', authMiddleware, async (req: AuthRequest, res: Re
 
     const validPassword = await bcrypt.compare(currentPassword, user.password);
     if (!validPassword) {
+      // Track failed attempt
+      const now = Date.now();
+      const current = passwordChangeAttempts.get(userId) || { count: 0, lockedUntil: 0, lastAttempt: now };
+      current.count++;
+      current.lastAttempt = now;
+      if (current.count >= MAX_PW_CHANGE_ATTEMPTS) {
+        current.lockedUntil = now + PW_CHANGE_LOCKOUT_MS;
+        current.count = 0;
+      }
+      passwordChangeAttempts.set(userId, current);
       res.status(401).json({ error: 'Current password is incorrect' });
       return;
     }
+
+    // Clear failed attempts on success
+    passwordChangeAttempts.delete(userId);
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
