@@ -177,12 +177,13 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Strip emails from member list for non-members viewing public channels
+    // Non-members viewing public channels get a minimal member list:
+    // only user id + name.  The ...m spread that was here previously
+    // leaked ChannelMember fields (role, joinedAt) to non-members.
     if (!isMember) {
       const sanitized = {
         ...channel,
         members: channel.members.map(m => ({
-          ...m,
           user: { id: m.user.id, name: m.user.name },
         })),
       };
