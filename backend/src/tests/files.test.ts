@@ -442,6 +442,43 @@ describe('File Uploads', () => {
       expect(downloadRes.body.error).toBe('Token not valid for this file');
     });
 
+    it('should refuse download token for file user cannot access', async () => {
+      // Create another user with their own file
+      const user2Res = await request(app).post('/auth/register').send({
+        email: 'tokentarget@example.com',
+        password: 'password123',
+        name: 'Token Target',
+      });
+
+      const upload2 = await request(app)
+        .post('/files')
+        .set('Authorization', `Bearer ${user2Res.body.token}`)
+        .attach('file', testFilePath);
+      expect(upload2.status).toBe(201);
+      const otherFileId = upload2.body.id;
+
+      // User 1 tries to generate a download token for user 2's file
+      const tokenRes = await request(app)
+        .post('/files/download-token')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ fileId: otherFileId });
+
+      // Should be refused — user 1 has no access to the file
+      expect(tokenRes.status).toBe(404);
+      expect(tokenRes.body.error).toBe('File not found');
+      expect(tokenRes.body).not.toHaveProperty('token');
+    });
+
+    it('should refuse download token for non-existent file', async () => {
+      const tokenRes = await request(app)
+        .post('/files/download-token')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ fileId: 999999 });
+
+      expect(tokenRes.status).toBe(404);
+      expect(tokenRes.body.error).toBe('File not found');
+    });
+
     it('should reject upload to non-member channel message', async () => {
       // Create user2 with their own channel
       const user2Res = await request(app).post('/auth/register').send({

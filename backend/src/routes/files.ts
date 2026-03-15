@@ -9,7 +9,7 @@ import rateLimit from 'express-rate-limit';
 import { Storage } from '@google-cloud/storage';
 import prisma from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { requireFileAccess } from '../middleware/authorize.js';
+import { requireFileAccess, verifyFileAccess } from '../middleware/authorize.js';
 import { AuthRequest } from '../types.js';
 import { parseIntParam } from '../utils/params.js';
 import { logError } from '../utils/logger.js';
@@ -322,6 +322,16 @@ router.post('/download-token', authMiddleware, async (req: AuthRequest, res: Res
       return;
     }
     const { fileId } = parsed.data;
+
+    // Verify the user has access to this file before issuing a token.
+    // Tokens are bearer credentials usable without authentication, so
+    // we must not issue them for files the requester cannot access.
+    const file = await verifyFileAccess(req.user!.userId, fileId);
+    if (!file) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+
     const downloadToken = jwt.sign(
       { userId: req.user!.userId, purpose: 'file-download', fileId },
       JWT_SECRET,
