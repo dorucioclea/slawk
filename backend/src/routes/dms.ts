@@ -9,6 +9,8 @@ import { USER_SELECT_BASIC, FILE_SELECT, DM_INCLUDE_USERS } from '../db/selects.
 import { parsePagination, paginateResults } from '../utils/pagination.js';
 import { parseIntParam } from '../utils/params.js';
 import { logError } from '../utils/logger.js';
+import { isUserViewingDM } from '../websocket/index.js';
+import { sendPushToUser } from '../services/pushService.js';
 
 const router = Router();
 
@@ -413,6 +415,20 @@ router.post('/messages/:id/reply', authMiddleware, requireDmAccess, async (req: 
       io.to(`user:${fromUserId}`).emit('dm:reply', payload);
       if (fromUserId !== toUserId) {
         io.to(`user:${toUserId}`).emit('dm:reply', payload);
+      }
+    }
+
+    // Push notification for DM thread reply (fire-and-forget)
+    if (reply && fromUserId !== toUserId) {
+      if (!isUserViewingDM(toUserId, fromUserId)) {
+        const senderName = reply.fromUser?.name || 'Someone';
+        sendPushToUser(toUserId, {
+          title: `${senderName} (thread)`,
+          body: content.slice(0, 100),
+          tag: `dm-thread-${parentId}`,
+          url: `/d/${fromUserId}`,
+          renotify: true,
+        }).catch(() => {});
       }
     }
 

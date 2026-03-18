@@ -3,6 +3,7 @@ import * as api from '@/lib/api';
 import { clearDownloadToken } from '@/lib/api';
 import { disconnectSocket } from '@/lib/socket';
 import type { User } from '@/lib/types';
+import { useNotificationStore } from './useNotificationStore';
 
 let storageListenerRegistered = false;
 
@@ -44,6 +45,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: () => {
+    // Unsubscribe from push notifications before clearing auth
+    useNotificationStore.getState().unsubscribe().catch(() => {});
     localStorage.removeItem('token');
     clearDownloadToken();
     disconnectSocket();

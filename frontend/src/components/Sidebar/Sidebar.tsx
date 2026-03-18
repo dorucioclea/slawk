@@ -11,6 +11,8 @@ import {
   Star,
   User,
   Shield,
+  Bell,
+  BellOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useChannelStore } from '@/stores/useChannelStore';
@@ -26,6 +28,7 @@ import type { Channel } from '@/lib/types';
 import { getChannels } from '@/lib/api';
 import type { AuthUser } from '@/lib/api';
 import { useMobileStore } from '@/stores/useMobileStore';
+import { useNotificationStore } from '@/stores/useNotificationStore';
 // HuddleBar moved to global render in App.tsx
 
 const navItems = [
@@ -41,6 +44,7 @@ export function Sidebar() {
   const { user, logout } = useAuthStore();
   const { openProfile } = useProfileStore();
   const closeSidebar = useMobileStore((s) => s.closeSidebar);
+  const { permission: notifPermission, isSubscribed: notifSubscribed, isLoading: notifLoading, subscribe: notifSubscribe, unsubscribe: notifUnsubscribe, checkPermission } = useNotificationStore();
   const [channelsExpanded, setChannelsExpanded] = useState(true);
   const [dmsExpanded, setDmsExpanded] = useState(true);
   const activeNav = location.pathname === '/files' ? 'files' : location.pathname === '/later' ? 'later' : location.pathname === '/admin' ? 'admin' : 'dms';
@@ -51,6 +55,11 @@ export function Sidebar() {
   const [showWorkspaceMenu, setShowWorkspaceMenu] = useState(false);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
+
+  // Check notification permission on mount
+  useEffect(() => {
+    checkPermission();
+  }, [checkPermission]);
 
   // Close avatar menu when clicking outside
   useEffect(() => {
@@ -241,6 +250,27 @@ export function Sidebar() {
                   <User className="h-4 w-4" />
                   Profile
                 </Button>
+                {notifPermission !== 'unsupported' && (
+                  <Button
+                    variant="menu-item"
+                    disabled={notifPermission === 'denied' || notifLoading}
+                    onClick={() => {
+                      if (notifSubscribed) {
+                        notifUnsubscribe();
+                      } else {
+                        notifSubscribe();
+                      }
+                      setShowAvatarMenu(false);
+                    }}
+                  >
+                    {notifSubscribed ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+                    {notifPermission === 'denied'
+                      ? 'Notifications blocked'
+                      : notifSubscribed
+                        ? 'Disable notifications'
+                        : 'Enable notifications'}
+                  </Button>
+                )}
                 <Button variant="menu-item" onClick={() => { setShowAvatarMenu(false); logout(); }}>
                   <LogOut className="h-4 w-4" />
                   Sign out

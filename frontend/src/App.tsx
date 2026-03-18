@@ -144,6 +144,54 @@ function DefaultRedirect() {
   return null;
 }
 
+function useFocusTracking() {
+  const activeChannelId = useChannelStore((s) => s.activeChannelId);
+  const activeDMId = useChannelStore((s) => s.activeDMId);
+  const prevViewRef = useRef<{ type: string; id: number | null }>({ type: '', id: null });
+
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const viewType = activeChannelId ? 'channel' : activeDMId ? 'dm' : 'none';
+    const viewId = activeChannelId || activeDMId || null;
+
+    // Only emit if view actually changed
+    if (prevViewRef.current.type === viewType && prevViewRef.current.id === viewId) return;
+    prevViewRef.current = { type: viewType, id: viewId };
+
+    if (activeChannelId) {
+      socket.emit('focus:channel', activeChannelId);
+    } else if (activeDMId) {
+      socket.emit('focus:dm', activeDMId);
+    } else {
+      socket.emit('focus:none');
+    }
+  }, [activeChannelId, activeDMId]);
+
+  // Track tab visibility — emit focus:none when hidden, restore when visible
+  useEffect(() => {
+    const handleVisibility = () => {
+      const socket = getSocket();
+      if (!socket) return;
+
+      if (document.hidden) {
+        socket.emit('focus:none');
+      } else {
+        const { activeChannelId, activeDMId } = useChannelStore.getState();
+        if (activeChannelId) {
+          socket.emit('focus:channel', activeChannelId);
+        } else if (activeDMId) {
+          socket.emit('focus:dm', activeDMId);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+}
+
 function AppShell() {
   const fetchChannels = useChannelStore((s) => s.fetchChannels);
   const channels = useChannelStore((s) => s.channels);
@@ -151,6 +199,9 @@ function AppShell() {
 
   const fetchDirectMessages = useChannelStore((s) => s.fetchDirectMessages);
   const loadBookmarks = useBookmarkStore((s) => s.load);
+
+  // Track which channel/DM the user is viewing for smart push notifications
+  useFocusTracking();
 
   useEffect(() => {
     fetchChannels();

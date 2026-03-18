@@ -48,6 +48,7 @@ model User {
   scheduledMessages  ScheduledMessage[]
   inviteLinks        InviteLink[]
   auditLogs          AuditLog[]
+  pushSubscriptions  PushSubscription[]
 }
 
 model InviteLink {
@@ -248,5 +249,18 @@ model ScheduledMessage {
   channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
   @@index([scheduledAt, sent])
+  @@index([userId])
+}
+
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  endpoint  String
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
   @@index([userId])
 }

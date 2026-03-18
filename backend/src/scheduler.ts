@@ -1,7 +1,8 @@
 import prisma from './db.js';
-import { getIO } from './websocket/index.js';
+import { getIO, isUserViewingChannel } from './websocket/index.js';
 import { USER_SELECT_BASIC, FILE_SELECT } from './db/selects.js';
 import { logError } from './utils/logger.js';
+import { sendPushToUser } from './services/pushService.js';
 
 const INTERVAL_MS = 30_000; // 30 seconds
 
@@ -106,6 +107,25 @@ export function startScheduler(): NodeJS.Timeout {
           if (io) {
             io.to(`channel:${scheduled.channelId}`).emit('message:new', message);
           }
+
+          // Push notifications for scheduled message (fire-and-forget)
+          const senderName = scheduled.user?.name || 'Someone';
+          const channelName = scheduled.channel?.name || 'channel';
+          prisma.channelMember.findMany({
+            where: { channelId: scheduled.channelId },
+            select: { userId: true },
+          }).then((members) => {
+            for (const member of members) {
+              if (member.userId === scheduled.userId) continue;
+              if (isUserViewingChannel(member.userId, scheduled.channelId)) continue;
+              sendPushToUser(member.userId, {
+                title: `#${channelName}`,
+                body: `${senderName}: ${message.content.slice(0, 100)}`,
+                tag: `channel-${scheduled.channelId}`,
+                url: `/c/${scheduled.channelId}`,
+              }).catch(() => {});
+            }
+          }).catch(() => {});
 
           console.log(
             `Scheduler: sent message ${message.id} to channel ${scheduled.channelId} (was scheduled ${scheduled.id})`

@@ -8,6 +8,8 @@ import { getIO } from '../websocket/index.js';
 import { USER_SELECT_BASIC, MESSAGE_INCLUDE_FULL, MESSAGE_INCLUDE_WITH_FILES, THREAD_REPLY_INCLUDE } from '../db/selects.js';
 import { parseIntParam } from '../utils/params.js';
 import { logError } from '../utils/logger.js';
+import { isUserViewingChannel } from '../websocket/index.js';
+import { sendPushToUser } from '../services/pushService.js';
 
 const router = Router();
 
@@ -76,6 +78,38 @@ router.post('/:id/reply', authMiddleware, requireMessageAccess, async (req: Auth
     const io = getIO();
     if (io && reply) {
       io.to(`channel:${parentMessage.channelId}`).emit('message:new', { ...reply, threadId: parentId });
+    }
+
+    // Push to thread participants (fire-and-forget)
+    if (reply) {
+      const channelInfo = await prisma.channel.findUnique({
+        where: { id: parentMessage.channelId },
+        select: { name: true },
+      });
+      const senderName = reply.user?.name || 'Someone';
+      const channelName = channelInfo?.name || 'channel';
+
+      // Get distinct thread participants (parent author + all repliers)
+      const participants = await prisma.message.findMany({
+        where: {
+          OR: [{ id: parentId }, { threadId: parentId }],
+          deletedAt: null,
+        },
+        select: { userId: true },
+        distinct: ['userId'],
+      });
+
+      for (const p of participants) {
+        if (p.userId === userId) continue;
+        if (isUserViewingChannel(p.userId, parentMessage.channelId)) continue;
+        sendPushToUser(p.userId, {
+          title: `#${channelName} thread`,
+          body: `${senderName}: ${content.slice(0, 100)}`,
+          tag: `thread-${parentId}`,
+          url: `/c/${parentMessage.channelId}`,
+          renotify: true,
+        }).catch(() => {});
+      }
     }
 
     res.status(201).json(reply);

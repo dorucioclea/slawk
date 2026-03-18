@@ -17,6 +17,7 @@ import {
 import { USER_SELECT_BASIC, MESSAGE_INCLUDE_WITH_FILES, DM_INCLUDE_USERS } from '../db/selects.js';
 import { logError } from '../utils/logger.js';
 import { registerHuddleHandlers, handleHuddleDisconnect } from './huddles.js';
+import { sendPushToUser } from '../services/pushService.js';
 
 interface AuthenticatedSocket extends Socket {
   user?: JwtPayload;
@@ -24,6 +25,23 @@ interface AuthenticatedSocket extends Socket {
 
 // Track online users: Map<userId, Set<socketId>>
 const onlineUsers = new Map<number, Set<string>>();
+
+// Track what each user is currently viewing (for smart push notifications)
+interface FocusedView {
+  type: 'channel' | 'dm';
+  id: number; // channelId or otherUserId
+}
+const userFocusedView = new Map<number, FocusedView | null>();
+
+export function isUserViewingChannel(userId: number, channelId: number): boolean {
+  const view = userFocusedView.get(userId);
+  return view?.type === 'channel' && view.id === channelId;
+}
+
+export function isUserViewingDM(userId: number, otherUserId: number): boolean {
+  const view = userFocusedView.get(userId);
+  return view?.type === 'dm' && view.id === otherUserId;
+}
 
 // Per-user rate limiting (keyed on userId, not socketId, to prevent bypass via reconnect)
 const RATE_LIMITS: Record<string, { max: number; windowMs: number }> = {
@@ -366,6 +384,33 @@ export function initializeWebSocket(httpServer: HttpServer) {
         socket.emit('message:new', finalMessage);
         // Broadcast to all OTHER users in the channel room
         socket.to(`channel:${data.channelId}`).emit('message:new', finalMessage);
+
+        // Fire push notifications (fire-and-forget)
+        if (finalMessage && !data.threadId) {
+          const channelInfo = await prisma.channel.findUnique({
+            where: { id: data.channelId },
+            select: { name: true },
+          });
+          const senderName = finalMessage.user?.name || 'Someone';
+          const channelName = channelInfo?.name || 'channel';
+          const body = `${senderName}: ${finalMessage.content.slice(0, 100)}`;
+
+          prisma.channelMember.findMany({
+            where: { channelId: data.channelId },
+            select: { userId: true },
+          }).then((members) => {
+            for (const member of members) {
+              if (member.userId === socket.user!.userId) continue;
+              if (isUserViewingChannel(member.userId, data.channelId)) continue;
+              sendPushToUser(member.userId, {
+                title: `#${channelName}`,
+                body,
+                tag: `channel-${data.channelId}`,
+                url: `/c/${data.channelId}`,
+              }).catch(() => {});
+            }
+          }).catch(() => {});
+        }
       } catch (error) {
         logError('WebSocket message error', error);
         socket.emit('error', { message: 'Failed to send message' });
@@ -652,6 +697,18 @@ export function initializeWebSocket(httpServer: HttpServer) {
         io.to(`user:${socket.user.userId}`).emit('dm:new', dm);
         if (!isSelfDM) {
           io.to(`user:${data.toUserId}`).emit('dm:new', dm);
+
+          // Fire push notification for DM (fire-and-forget)
+          if (!isUserViewingDM(data.toUserId, socket.user.userId)) {
+            const senderName = dm.fromUser?.name || 'Someone';
+            sendPushToUser(data.toUserId, {
+              title: senderName,
+              body: dm.content.slice(0, 100),
+              tag: `dm-${socket.user.userId}`,
+              url: `/d/${socket.user.userId}`,
+              renotify: true,
+            }).catch(() => {});
+          }
         }
       } catch (error) {
         logError('WebSocket DM error', error);
@@ -712,6 +769,26 @@ export function initializeWebSocket(httpServer: HttpServer) {
       });
     });
 
+    // Focus tracking for smart push notifications
+    socket.on('focus:channel', (channelId: unknown) => {
+      if (!socket.user) return;
+      const parsed = wsChannelIdSchema.safeParse(channelId);
+      if (!parsed.success) return;
+      userFocusedView.set(socket.user.userId, { type: 'channel', id: parsed.data });
+    });
+
+    socket.on('focus:dm', (otherUserId: unknown) => {
+      if (!socket.user) return;
+      const parsed = wsUserIdSchema.safeParse(otherUserId);
+      if (!parsed.success) return;
+      userFocusedView.set(socket.user.userId, { type: 'dm', id: parsed.data });
+    });
+
+    socket.on('focus:none', () => {
+      if (!socket.user) return;
+      userFocusedView.set(socket.user.userId, null);
+    });
+
     // Register huddle handlers
     registerHuddleHandlers(io, socket as AuthenticatedSocket, onlineUsers, checkRateLimit);
 
@@ -727,9 +804,10 @@ export function initializeWebSocket(httpServer: HttpServer) {
         if (userSockets) {
           userSockets.delete(socket.id);
 
-          // If no more connections, mark user offline
+          // If no more connections, mark user offline and clear focus
           if (userSockets.size === 0) {
             onlineUsers.delete(userId);
+            userFocusedView.delete(userId);
 
             try {
               await prisma.user.update({

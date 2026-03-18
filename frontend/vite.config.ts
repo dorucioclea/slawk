@@ -57,6 +57,7 @@ export default defineConfig({
         },
       },
       '/bookmarks': { target: 'http://localhost:3000', changeOrigin: true },
+      '/push': { target: 'http://localhost:3000', changeOrigin: true },
       '/health': { target: 'http://localhost:3000', changeOrigin: true },
       '/socket.io': { target: 'http://localhost:3000', changeOrigin: true, ws: true },
     },
