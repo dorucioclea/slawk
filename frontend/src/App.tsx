@@ -6,6 +6,7 @@ import { useMessageStore } from '@/stores/useMessageStore';
 import { useDMStore } from '@/stores/useDMStore';
 import { useBookmarkStore } from '@/stores/useBookmarkStore';
 import { connectSocket, disconnectSocket, getSocket } from '@/lib/socket';
+import { useNotificationStore } from '@/stores/useNotificationStore';
 import { useHuddleStore, setHuddleUserId } from '@/stores/useHuddleStore';
 import { HuddleBar } from '@/components/Huddle/HuddleBar';
 import { HuddleIncomingCall } from '@/components/Huddle/HuddleIncomingCall';
@@ -207,6 +208,12 @@ function AppShell() {
     fetchChannels();
     fetchDirectMessages();
     loadBookmarks();
+
+    // Auto-request push notification permission on first load
+    const { permission, isSubscribed, subscribe } = useNotificationStore.getState();
+    if (permission !== 'unsupported' && permission !== 'denied' && !isSubscribed) {
+      subscribe();
+    }
   }, [fetchChannels, fetchDirectMessages, loadBookmarks]);
 
   // Connect socket and set up event listeners
