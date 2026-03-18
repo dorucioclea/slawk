@@ -85,6 +85,27 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       });
     });
 
+    // Broadcast via WebSocket so the recipient sees the DM in real-time
+    const io = getIO();
+    if (io && dm) {
+      io.to(`user:${fromUserId}`).emit('dm:new', dm);
+      if (fromUserId !== toUserId) {
+        io.to(`user:${toUserId}`).emit('dm:new', dm);
+
+        // Push notification (fire-and-forget)
+        if (!isUserViewingDM(toUserId, fromUserId)) {
+          const senderName = dm.fromUser?.name || 'Someone';
+          sendPushToUser(toUserId, {
+            title: senderName,
+            body: dm.content.slice(0, 100),
+            tag: `dm-${fromUserId}`,
+            url: `/d/${fromUserId}`,
+            renotify: true,
+          }).catch(() => {});
+        }
+      }
+    }
+
     res.status(201).json(dm);
   } catch (error) {
     if (error instanceof z.ZodError) {
