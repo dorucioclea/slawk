@@ -359,7 +359,7 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange, variant = 
       </div>
 
       {/* Reply input */}
-      <div className="relative border-t border-slack-border px-4 py-3">
+      <div className="relative border-t border-slack-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {readOnly ? (
           <div className="flex items-center justify-center py-3 text-[13px] text-slack-secondary">
             Join the channel to reply in threads

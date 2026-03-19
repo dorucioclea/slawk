@@ -41,7 +41,7 @@ export function FilesPanel({ channelId, onClose, title }: FilesPanelProps) {
   return (
     <div data-testid="files-panel" className="flex w-full md:w-[300px] flex-col border-l border-slack-border bg-white absolute inset-0 md:static md:inset-auto z-30 md:z-auto">
       <PanelHeader icon={FileText} title={panelTitle} onClose={onClose} />
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
         {isLoading ? (
           <div className="p-4 text-center text-sm text-slack-hint">Loading...</div>
         ) : loadError ? (
