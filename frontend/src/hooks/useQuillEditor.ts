@@ -1,8 +1,35 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
-import Quill from 'quill';
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import Quill, { Delta } from 'quill';
 import 'quill/dist/quill.snow.css';
 import { uploadFile, getUsers, type ApiFile, type AuthUser } from '@/lib/api';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
+import emojiData from '@emoji-mart/data';
+import type { EmojiOption } from '@/components/Messages/EmojiAutocomplete';
+
+// Build searchable emoji list from emoji-mart data
+function buildEmojiIndex(): EmojiOption[] {
+  const emojis = (emojiData as any).emojis;
+  const aliases = (emojiData as any).aliases || {};
+  const results: EmojiOption[] = [];
+  for (const [id, entry] of Object.entries(emojis) as any[]) {
+    const native = entry.skins?.[0]?.native;
+    if (!native) continue;
+    results.push({ id, native, name: entry.name });
+  }
+  // Add aliases as separate entries pointing to the same emoji
+  for (const [alias, target] of Object.entries(aliases) as [string, string][]) {
+    const entry = emojis[target];
+    if (!entry?.skins?.[0]?.native) continue;
+    results.push({ id: alias, native: entry.skins[0].native, name: entry.name });
+  }
+  return results;
+}
+
+const EMOJI_INDEX = buildEmojiIndex();
+const EMOJI_MAP = new Map<string, EmojiOption>();
+for (const e of EMOJI_INDEX) {
+  if (!EMOJI_MAP.has(e.id)) EMOJI_MAP.set(e.id, e);
+}
 
 interface UseQuillEditorOptions {
   placeholder: string;
@@ -34,11 +61,16 @@ export function useQuillEditor({
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionStartIndex, setMentionStartIndex] = useState<number | null>(null);
   const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
+  const [showEmojiAutocomplete, setShowEmojiAutocomplete] = useState(false);
+  const [emojiQuery, setEmojiQuery] = useState('');
+  const [emojiStartIndex, setEmojiStartIndex] = useState<number | null>(null);
+  const [emojiSelectedIndex, setEmojiSelectedIndex] = useState(0);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkText, setLinkText] = useState('');
   const linkSavedRangeRef = useRef<{ index: number; length: number } | null>(null);
   const mentionDropdownRef = useRef<HTMLDivElement>(null);
+  const emojiAutocompleteRef = useRef<HTMLDivElement>(null);
   const lastSelectionRef = useRef<{ index: number; length: number }>({ index: 0, length: 0 });
 
   const { isRecording, duration: recordingDuration, startRecording, stopRecording, cancelRecording } = useVoiceRecorder({
@@ -49,14 +81,36 @@ export function useQuillEditor({
     },
   });
 
+  // Filter emojis based on query (memoized)
+  const filteredEmojis = useMemo(() => {
+    if (!showEmojiAutocomplete || emojiQuery.length < 2) return [];
+    const q = emojiQuery.toLowerCase();
+    const results = EMOJI_INDEX.filter((e) => e.id.includes(q));
+    // Sort: exact start match first, then by id length (shorter = more relevant)
+    results.sort((a, b) => {
+      const aStarts = a.id.startsWith(q) ? 0 : 1;
+      const bStarts = b.id.startsWith(q) ? 0 : 1;
+      if (aStarts !== bStarts) return aStarts - bStarts;
+      return a.id.length - b.id.length;
+    });
+    return results.slice(0, 8);
+  }, [showEmojiAutocomplete, emojiQuery]);
+
   // Stable refs for Quill keyboard bindings
   const mentionActiveRef = useRef(false);
   mentionActiveRef.current = showMentionDropdown;
+  const emojiActiveRef = useRef(false);
+  emojiActiveRef.current = showEmojiAutocomplete && filteredEmojis.length > 0;
   const mentionUsersRef = useRef(mentionUsers);
   mentionUsersRef.current = mentionUsers;
   const mentionSelectedIndexRef = useRef(mentionSelectedIndex);
   mentionSelectedIndexRef.current = mentionSelectedIndex;
+  const filteredEmojisRef = useRef(filteredEmojis);
+  filteredEmojisRef.current = filteredEmojis;
+  const emojiSelectedIndexRef = useRef(emojiSelectedIndex);
+  emojiSelectedIndexRef.current = emojiSelectedIndex;
   const insertMentionRef = useRef<(user: AuthUser) => void>(() => {});
+  const insertEmojiAutocompleteRef = useRef<(emoji: EmojiOption) => void>(() => {});
 
   // Quill initialization
   useEffect(() => {
@@ -76,6 +130,14 @@ export function useQuillEditor({
             enter: {
               key: 'Enter',
               handler: () => {
+                if (emojiActiveRef.current) {
+                  const emojis = filteredEmojisRef.current;
+                  const idx = emojiSelectedIndexRef.current;
+                  if (emojis.length > 0 && idx < emojis.length) {
+                    insertEmojiAutocompleteRef.current(emojis[idx]);
+                  }
+                  return false;
+                }
                 if (mentionActiveRef.current) {
                   const users = mentionUsersRef.current;
                   const idx = mentionSelectedIndexRef.current;
@@ -91,6 +153,10 @@ export function useQuillEditor({
             escape: {
               key: 'Escape',
               handler: () => {
+                if (emojiActiveRef.current) {
+                  setShowEmojiAutocomplete(false);
+                  return false;
+                }
                 if (mentionActiveRef.current) {
                   setShowMentionDropdown(false);
                   return false;
@@ -101,6 +167,12 @@ export function useQuillEditor({
             arrowUp: {
               key: 'ArrowUp',
               handler: (range: any) => {
+                if (emojiActiveRef.current) {
+                  setEmojiSelectedIndex((prev) =>
+                    prev > 0 ? prev - 1 : filteredEmojisRef.current.length - 1
+                  );
+                  return false;
+                }
                 if (mentionActiveRef.current) {
                   setMentionSelectedIndex((prev) =>
                     prev > 0 ? prev - 1 : mentionUsersRef.current.length - 1
@@ -124,6 +196,12 @@ export function useQuillEditor({
             arrowDown: {
               key: 'ArrowDown',
               handler: (range: any) => {
+                if (emojiActiveRef.current) {
+                  setEmojiSelectedIndex((prev) =>
+                    prev < filteredEmojisRef.current.length - 1 ? prev + 1 : 0
+                  );
+                  return false;
+                }
                 if (mentionActiveRef.current) {
                   setMentionSelectedIndex((prev) =>
                     prev < mentionUsersRef.current.length - 1 ? prev + 1 : 0
@@ -247,6 +325,62 @@ export function useQuillEditor({
             }
           }
         }
+      }
+
+      // Detect :emoji shortcode trigger (only on user input, not programmatic changes)
+      if (source !== 'user') {
+        setShowEmojiAutocomplete(false);
+      }
+      const sel2 = source === 'user' ? quill.getSelection() : null;
+      if (sel2) {
+        // Skip emoji detection inside code or code blocks
+        const fmt = quill.getFormat(sel2.index);
+        if (fmt.code || fmt['code-block']) {
+          setShowEmojiAutocomplete(false);
+        } else {
+        const cPos = sel2.index;
+        const txt = quill.getText(0, cPos);
+
+        // Check for closing colon auto-convert: :shortcode:
+        if (txt.endsWith(':') && txt.length >= 4) {
+          const beforeClose = txt.slice(0, -1);
+          const openColon = beforeClose.lastIndexOf(':');
+          if (openColon >= 0) {
+            const beforeOpen = openColon > 0 ? txt[openColon - 1] : ' ';
+            const shortcode = beforeClose.slice(openColon + 1).toLowerCase();
+            if ((openColon === 0 || /\s/.test(beforeOpen)) && shortcode.length >= 2 && !/\s/.test(shortcode)) {
+              const match = EMOJI_MAP.get(shortcode);
+              if (match) {
+                const delta = new Delta()
+                  .retain(openColon)
+                  .delete(shortcode.length + 2)
+                  .insert(match.native);
+                quill.updateContents(delta, 'api');
+                quill.setSelection(openColon + match.native.length);
+                setShowEmojiAutocomplete(false);
+                return;
+              }
+            }
+          }
+        }
+
+        // Find the last colon for autocomplete trigger
+        const colonIdx = txt.lastIndexOf(':');
+        if (colonIdx >= 0) {
+          const beforeColon = colonIdx > 0 ? txt[colonIdx - 1] : ' ';
+          const afterColon = txt.slice(colonIdx + 1);
+          if ((colonIdx === 0 || /\s/.test(beforeColon)) && !/\s/.test(afterColon) && afterColon.length >= 2) {
+            setEmojiStartIndex(colonIdx);
+            setEmojiQuery(afterColon.toLowerCase());
+            setShowEmojiAutocomplete(true);
+            setEmojiSelectedIndex(0);
+          } else {
+            setShowEmojiAutocomplete(false);
+          }
+        } else {
+          setShowEmojiAutocomplete(false);
+        }
+        } // end code-block guard else
       }
 
       // Detect @mention trigger
@@ -373,6 +507,23 @@ export function useQuillEditor({
     [mentionStartIndex, mentionQuery],
   );
   insertMentionRef.current = insertMention;
+
+  const insertEmojiFromAutocomplete = useCallback(
+    (emoji: EmojiOption) => {
+      const quill = quillRef.current;
+      if (!quill || emojiStartIndex === null) return;
+      const deleteLength = emojiQuery.length + 1; // +1 for the leading ':'
+      quill.deleteText(emojiStartIndex, deleteLength);
+      quill.insertText(emojiStartIndex, emoji.native);
+      quill.setSelection(emojiStartIndex + emoji.native.length);
+      setShowEmojiAutocomplete(false);
+      setEmojiQuery('');
+      setEmojiStartIndex(null);
+      quill.focus();
+    },
+    [emojiStartIndex, emojiQuery],
+  );
+  insertEmojiAutocompleteRef.current = insertEmojiFromAutocomplete;
 
   const handleMentionButtonClick = useCallback(() => {
     const quill = quillRef.current;
@@ -501,6 +652,7 @@ export function useQuillEditor({
     quillRef,
     fileInputRef,
     mentionDropdownRef,
+    emojiAutocompleteRef,
 
     // State
     canSend,
@@ -513,6 +665,10 @@ export function useQuillEditor({
     showMentionDropdown,
     mentionUsers,
     mentionSelectedIndex,
+    showEmojiAutocomplete,
+    filteredEmojis,
+    emojiSelectedIndex,
+    emojiQuery,
     showLinkModal,
     linkUrl,
     linkText,
@@ -530,6 +686,7 @@ export function useQuillEditor({
     // Handlers
     handleEmojiSelect,
     insertMention,
+    insertEmojiFromAutocomplete,
     handleMentionButtonClick,
     handleLinkSave,
     handleFileSelect,

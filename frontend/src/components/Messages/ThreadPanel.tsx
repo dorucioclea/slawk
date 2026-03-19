@@ -15,6 +15,7 @@ import { serializeDelta } from '@/lib/serializeDelta';
 import { FormatToolbar } from './FormatToolbar';
 import { FilePreview } from './FilePreview';
 import { MentionDropdown } from './MentionDropdown';
+import { EmojiAutocomplete } from './EmojiAutocomplete';
 import { EmojiPicker } from '@/components/ui/emoji-picker';
 import { LinkModal } from './LinkModal';
 import { PanelHeader } from './PanelHeader';
@@ -379,6 +380,16 @@ export function ThreadPanel({ messageId, onClose, onReplyCountChange, variant = 
           )}
 
           <div ref={editor.editorRef} />
+
+          {editor.showEmojiAutocomplete && editor.filteredEmojis.length > 0 && (
+            <EmojiAutocomplete
+              ref={editor.emojiAutocompleteRef}
+              emojis={editor.filteredEmojis}
+              selectedIndex={editor.emojiSelectedIndex}
+              query={editor.emojiQuery}
+              onSelect={editor.insertEmojiFromAutocomplete}
+            />
+          )}
 
           {editor.showMentionDropdown && (
             <MentionDropdown

@@ -13,6 +13,7 @@ import { ScheduleMenu } from './ScheduleMenu';
 import { FormatToolbar } from './FormatToolbar';
 import { FilePreview } from './FilePreview';
 import { MentionDropdown } from './MentionDropdown';
+import { EmojiAutocomplete } from './EmojiAutocomplete';
 import { EditorToolbar } from './EditorToolbar';
 import { useQuillEditor } from '@/hooks/useQuillEditor';
 import { useClickOutside } from '@/hooks/useClickOutside';
@@ -159,6 +160,16 @@ export function MessageInput({ placeholder, onSend, sendError, clearSendError, c
         )}
 
         <div ref={editor.editorRef} />
+
+        {editor.showEmojiAutocomplete && editor.filteredEmojis.length > 0 && (
+          <EmojiAutocomplete
+            ref={editor.emojiAutocompleteRef}
+            emojis={editor.filteredEmojis}
+            selectedIndex={editor.emojiSelectedIndex}
+            query={editor.emojiQuery}
+            onSelect={editor.insertEmojiFromAutocomplete}
+          />
+        )}
 
         {editor.showMentionDropdown && (
           <MentionDropdown
