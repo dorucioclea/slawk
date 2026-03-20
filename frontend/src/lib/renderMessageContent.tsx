@@ -5,9 +5,8 @@ import React from 'react';
  * Handles: **bold**, *italic*, `code`, ~~strikethrough~~, [text](url), plain URLs, @mentions
  */
 function renderInline(content: string, keyOffset: number = 0): React.ReactNode[] {
-  // @mentions are matched BEFORE italic; italic uses negative lookahead to avoid capturing *@Name*
-  // Mentions: @Word or @Word Word or @Word Word Word (max 3 words to avoid greedy matching)
-  const TOKEN = /(\*\*(.+?)\*\*)|(\*(@\w+(?:\s[A-Z][\w'-]*){0,2})\*)|(@\w+(?:\s[A-Z][\w'-]*){0,2})|(\*([^*\n]+?)\*)|(`([^`\n]+?)`)|(~~(.+?)~~)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"'\])]+)/g;
+  // Mentions use <@id|name> format (inserted by autocomplete). Bare @word is NOT a mention.
+  const TOKEN = /(\*\*(.+?)\*\*)|(<@(\d+)\|([^>]+)>)|(\*([^*\n]+?)\*)|(`([^`\n]+?)`)|(~~(.+?)~~)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"'\])]+)/g;
   const nodes: React.ReactNode[] = [];
   let last = 0;
   let m: RegExpExecArray | null;
@@ -18,11 +17,8 @@ function renderInline(content: string, keyOffset: number = 0): React.ReactNode[]
       // **bold**
       nodes.push(<strong key={key++} className="font-bold">{m[2]}</strong>);
     } else if (m[3]) {
-      // *@mention* — emphasized mention, render as mention (not italic)
-      nodes.push(<span key={key++} className="mention-highlight rounded bg-slack-mention px-[2px] text-slack-link font-medium cursor-pointer hover:bg-slack-mention-hover" data-mention-name={m[4]?.slice(1)}>{m[4]}</span>);
-    } else if (m[5]) {
-      // @mention
-      nodes.push(<span key={key++} className="mention-highlight rounded bg-slack-mention px-[2px] text-slack-link font-medium cursor-pointer hover:bg-slack-mention-hover" data-mention-name={m[5].slice(1)}>{m[5]}</span>);
+      // <@id|name> — mention
+      nodes.push(<span key={key++} className="mention-highlight rounded bg-slack-mention px-[2px] text-slack-link font-medium cursor-pointer hover:bg-slack-mention-hover" data-mention-id={m[4]} data-mention-name={m[5]}>@{m[5]}</span>);
     } else if (m[6]) {
       // *italic*
       nodes.push(<em key={key++} className="leading-[22px]">{m[7]}</em>);

@@ -15,7 +15,7 @@ import { useMessageActions } from '@/hooks/useMessageActions';
 import { useMessageHover } from '@/hooks/useMessageHover';
 import { useMessageEdit } from '@/hooks/useMessageEdit';
 import type { Message as MessageType } from '@/lib/types';
-import { getAuthFileUrl, getFileUrl, getUsers, markChannelUnread } from '@/lib/api';
+import { getAuthFileUrl, getFileUrl, markChannelUnread } from '@/lib/api';
 import { renderMessageContent } from '@/lib/renderMessageContent';
 import { ImageLightbox } from './ImageLightbox';
 import { MessageToolbar } from './MessageToolbar';
@@ -162,16 +162,11 @@ export function Message({ message, showAvatar, isCompact, onOpenThread, readOnly
         ) : (
           <div
             className="text-[15px] font-normal text-slack-primary leading-[22px] whitespace-pre-wrap break-words"
-            onClick={async (e) => {
-              const el = (e.target as HTMLElement).closest('[data-mention-name]');
+            onClick={(e) => {
+              const el = (e.target as HTMLElement).closest('[data-mention-id]');
               if (!el) return;
-              const name = el.getAttribute('data-mention-name');
-              if (!name) return;
-              try {
-                const users = await getUsers(name);
-                const match = users.find((u) => u.name === name);
-                if (match) openProfile(match.id);
-              } catch { /* ignore */ }
+              const id = el.getAttribute('data-mention-id');
+              if (id) openProfile(Number(id));
             }}
           >
             {renderMessageContent(message.content)}

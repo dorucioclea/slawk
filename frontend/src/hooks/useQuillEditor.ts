@@ -6,6 +6,33 @@ import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import emojiData from '@emoji-mart/data';
 import type { EmojiOption } from '@/components/Messages/EmojiAutocomplete';
 
+// Register a custom mention embed blot so @mentions are distinct from plain text
+const Embed = Quill.import('blots/embed') as any;
+class MentionBlot extends Embed {
+  static blotName = 'mention';
+  static tagName = 'span';
+  static className = 'ql-mention';
+
+  static create(data: { id: number; name: string }) {
+    const node = super.create() as HTMLElement;
+    node.setAttribute('data-mention-id', String(data.id));
+    node.setAttribute('data-mention-name', data.name);
+    node.textContent = `@${data.name}`;
+    node.style.cssText =
+      'background:rgba(29,155,209,0.1);color:#1264a3;border-radius:3px;padding:0 2px;font-weight:500;cursor:pointer;';
+    node.contentEditable = 'false';
+    return node;
+  }
+
+  static value(node: HTMLElement) {
+    return {
+      id: Number(node.getAttribute('data-mention-id')),
+      name: node.getAttribute('data-mention-name') || '',
+    };
+  }
+}
+Quill.register(MentionBlot);
+
 // Build searchable emoji list from emoji-mart data
 function buildEmojiIndex(): EmojiOption[] {
   const emojis = (emojiData as any).emojis;
@@ -494,11 +521,11 @@ export function useQuillEditor({
     (user: AuthUser) => {
       const quill = quillRef.current;
       if (!quill || mentionStartIndex === null) return;
-      const mentionText = `@${user.name}`;
-      const deleteLength = mentionQuery.length + 1;
+      const deleteLength = mentionQuery.length + 1; // +1 for the '@'
       quill.deleteText(mentionStartIndex, deleteLength);
-      quill.insertText(mentionStartIndex, mentionText + ' ');
-      quill.setSelection(mentionStartIndex + mentionText.length + 1);
+      quill.insertEmbed(mentionStartIndex, 'mention', { id: user.id, name: user.name }, 'user');
+      quill.insertText(mentionStartIndex + 1, ' ', 'user');
+      quill.setSelection(mentionStartIndex + 2);
       setShowMentionDropdown(false);
       setMentionQuery('');
       setMentionStartIndex(null);

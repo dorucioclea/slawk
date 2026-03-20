@@ -21,7 +21,8 @@ export function useMessageEdit({ onSave }: UseMessageEditOptions) {
 
   const startEdit = (messageId: number, content: string) => {
     setEditingId(messageId);
-    setEditContent(content);
+    // Convert <@id|name> mention tokens to readable @name for editing
+    setEditContent(content.replace(/<@\d+\|([^>]+)>/g, '@$1'));
   };
 
   const cancelEdit = () => {
