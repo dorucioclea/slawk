@@ -26,7 +26,7 @@ export const MESSAGE_INCLUDE_FULL = {
   user: { select: USER_SELECT_BASIC },
   reactions: { include: { user: { select: { id: true, name: true } } } },
   files: { select: FILE_SELECT },
-  _count: { select: { replies: true } },
+  _count: { select: { replies: { where: { deletedAt: null } } } },
 } as const;
 
 export const MESSAGE_INCLUDE_WITH_FILES = {

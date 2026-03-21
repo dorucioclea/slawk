@@ -256,8 +256,9 @@ router.get('/:userId', authMiddleware, async (req: AuthRequest, res: Response) =
 
     const dmInclude = {
       ...DM_INCLUDE_USERS,
-      _count: { select: { replies: true } },
+      _count: { select: { replies: { where: { deletedAt: null } } } },
       replies: {
+        where: { deletedAt: null },
         select: {
           fromUser: { select: { id: true, name: true, avatar: true } },
         },

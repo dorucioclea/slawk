@@ -583,6 +583,7 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
         {/* Thread Panel */}
         {activeThreadId && (
           <ThreadPanel
+            key={activeThreadId}
             messageId={activeThreadId}
             variant="dm"
             onClose={handleCloseThread}

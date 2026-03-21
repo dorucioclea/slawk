@@ -149,6 +149,7 @@ export function MessageArea() {
       )}
       {activeThreadId && (
         <ThreadPanel
+          key={activeThreadId}
           messageId={activeThreadId}
           onClose={handleCloseThread}
           onReplyCountChange={handleReplyCountChange}
