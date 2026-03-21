@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { format, isToday, isYesterday } from 'date-fns';
 import {
   Pin,
@@ -76,6 +76,8 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
   const [isStarred, setIsStarred] = useState(false);
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isAtBottom = useRef(true);
   const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const didScrollToTarget = useRef(false);
   const hoverLeaveTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -128,6 +130,24 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
     }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length, dmScrollToMessageId]);
+
+  // Track whether user is scrolled to the bottom
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      isAtBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+    };
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Re-anchor scroll when thread panel opens/closes (width reflow shifts content)
+  useLayoutEffect(() => {
+    if (isAtBottom.current) {
+      messagesEndRef.current?.scrollIntoView();
+    }
+  }, [activeThreadId, showPins, showFiles]);
 
   const handleStartEdit = (msg: { id: number; content: string }) => {
     startEdit(msg.id, msg.content);
@@ -261,7 +281,7 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
         {/* Messages column */}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {/* Messages list */}
-          <div className="flex-1 overflow-y-auto bg-white px-5 pb-4 pt-5">
+          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto bg-white px-5 pb-4 pt-5">
             {isLoading ? (
               <div className="flex h-full items-center justify-center text-sm text-slack-hint">
                 Loading messages...
