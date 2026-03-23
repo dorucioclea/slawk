@@ -9,6 +9,7 @@ import { isUserOnline, getIO } from '../websocket/index.js';
 import { USER_SELECT_BASIC, USER_SELECT_FULL, MESSAGE_INCLUDE_FULL } from '../db/selects.js';
 import { parseIntParam } from '../utils/params.js';
 import { logError } from '../utils/logger.js';
+import { writeAuditLog } from '../utils/auditLog.js';
 
 const router = Router();
 
@@ -533,6 +534,132 @@ router.patch('/:id/members/:userId', authMiddleware, requireChannelMembership, a
     }
     logError('Update member role error', error);
     res.status(500).json({ error: 'Failed to update member role' });
+  }
+});
+
+// DELETE /channels/:id/members/:userId - Remove a member from a channel
+router.delete('/:id/members/:userId', authMiddleware, requireChannelMembership, async (req: AuthRequest, res: Response) => {
+  try {
+    const channelId = req.channelId!;
+    const targetUserId = parseIntParam(req.params.userId);
+    if (!targetUserId) {
+      res.status(400).json({ error: 'Invalid user ID' });
+      return;
+    }
+
+    const actorId = req.user!.userId;
+
+    // Cannot remove yourself - use the leave endpoint instead
+    if (actorId === targetUserId) {
+      res.status(400).json({ error: 'Cannot remove yourself from the channel. Use the leave endpoint instead.' });
+      return;
+    }
+
+    // Get channel details and check if archived
+    const channel = await prisma.channel.findUnique({
+      where: { id: channelId },
+      select: { archivedAt: true, createdBy: true, name: true },
+    });
+
+    if (!channel) {
+      res.status(404).json({ error: 'Channel not found' });
+      return;
+    }
+
+    if (channel.archivedAt) {
+      res.status(403).json({ error: 'This channel has been archived' });
+      return;
+    }
+
+    // Cannot remove the channel creator
+    if (channel.createdBy === targetUserId) {
+      res.status(403).json({ error: 'Cannot remove the channel creator' });
+      return;
+    }
+
+    // Get actor's channel membership
+    const actorMember = await prisma.channelMember.findUnique({
+      where: { userId_channelId: { userId: actorId, channelId } },
+    });
+
+    if (!actorMember) {
+      res.status(403).json({ error: 'You are not a member of this channel' });
+      return;
+    }
+
+    // Get target's channel membership
+    const targetMember = await prisma.channelMember.findUnique({
+      where: { userId_channelId: { userId: targetUserId, channelId } },
+    });
+
+    if (!targetMember) {
+      res.status(404).json({ error: 'User is not a member of this channel' });
+      return;
+    }
+
+    // Authorization logic:
+    // 1. Channel OWNER can remove anyone (except creator and themselves)
+    // 2. Channel MODERATOR can only remove MEMBERs (not OWNER/MODERATOR)
+    // 3. Channel MEMBER cannot remove anyone
+    // Note: Workspace admins should use /admin/channels/:id/members/:userId instead
+    const isChannelOwner = actorMember.role === 'OWNER';
+    const isChannelModerator = actorMember.role === 'MODERATOR';
+
+    if (!isChannelOwner && !isChannelModerator) {
+      res.status(403).json({ error: 'Only channel owners and moderators can remove members' });
+      return;
+    }
+
+    // If actor is MODERATOR, they can only remove MEMBERs
+    if (isChannelModerator && !isChannelOwner) {
+      if (targetMember.role !== 'MEMBER') {
+        res.status(403).json({ error: 'Moderators can only remove regular members' });
+        return;
+      }
+    }
+
+    // Use transaction to ensure atomicity
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.channelMember.delete({
+        where: { userId_channelId: { userId: targetUserId, channelId } },
+      });
+      const memberCount = await tx.channelMember.count({ where: { channelId } });
+      return { memberCount };
+    });
+
+    // Emit WebSocket events
+    const io = getIO();
+    if (io) {
+      // Notify channel members about the removal (same event as voluntary leave)
+      io.to(`channel:${channelId}`).emit('channel:member-left', {
+        channelId,
+        userId: targetUserId,
+        memberCount: result.memberCount,
+      });
+      // Evict user's sockets from the channel room
+      io.in(`user:${targetUserId}`).socketsLeave(`channel:${channelId}`);
+    }
+
+    // Get target user name for audit log
+    const targetUser = await prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { name: true },
+    });
+
+    // Write audit log (fire-and-forget, non-blocking)
+    writeAuditLog({
+      action: 'channel.member_removed',
+      actorId,
+      targetType: 'channel',
+      targetId: channelId,
+      targetName: channel.name,
+      details: `Removed user: ${targetUser?.name || targetUserId}`,
+    });
+
+    res.json({ message: 'Member removed successfully' });
+  } catch (error) {
+    logError('Remove member error', error);
+    res.status(500).json({ error: 'Failed to remove member' });
   }
 });
 

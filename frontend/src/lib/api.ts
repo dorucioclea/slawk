@@ -178,12 +178,27 @@ export interface ApiChannel {
   _count: { members: number; messages: number };
 }
 
+export interface ApiChannelDetail extends ApiChannel {
+  createdBy?: number | null;
+  members: Array<{
+    userId: number;
+    channelId: number;
+    role: 'OWNER' | 'MODERATOR' | 'MEMBER';
+    joinedAt: string;
+    user: {
+      id: number;
+      name: string;
+      avatar?: string | null;
+    };
+  }>;
+}
+
 export function getChannels() {
   return request<ApiChannel[]>('/channels');
 }
 
 export function getChannel(id: number) {
-  return request<ApiChannel>(`/channels/${id}`);
+  return request<ApiChannelDetail>(`/channels/${id}`);
 }
 
 export function createChannel(name: string, isPrivate = false) {
@@ -611,6 +626,12 @@ export function addChannelMember(channelId: number, userId: number) {
   });
 }
 
+export function removeChannelMember(channelId: number, userId: number) {
+  return request<{ message: string }>(`/channels/${channelId}/members/${userId}`, {
+    method: 'DELETE',
+  });
+}
+
 // ---- Scheduled Messages ----
 
 export interface ApiScheduledMessage {
@@ -745,6 +766,12 @@ export function adminEditChannel(channelId: number, data: { name?: string; isPri
   return request<AdminChannel>(`/admin/channels/${channelId}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
+  });
+}
+
+export function adminRemoveChannelMember(channelId: number, userId: number) {
+  return request<{ message: string }>(`/admin/channels/${channelId}/members/${userId}`, {
+    method: 'DELETE',
   });
 }
 
