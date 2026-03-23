@@ -18,6 +18,7 @@ import type { Message as MessageType } from '@/lib/types';
 import { getAuthFileUrl, getFileUrl, markChannelUnread } from '@/lib/api';
 import { renderMessageContent } from '@/lib/renderMessageContent';
 import { ImageLightbox } from './ImageLightbox';
+import { FilePreviewModal } from './FilePreviewModal';
 import { MessageToolbar } from './MessageToolbar';
 import { MessageActionsMenu } from './MessageActionsMenu';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
@@ -41,6 +42,7 @@ export function Message({ message, showAvatar, isCompact, onOpenThread, readOnly
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [lightboxAlt, setLightboxAlt] = useState<string>('');
+  const [previewFile, setPreviewFile] = useState<{ id: number; name: string; size: number; mimetype: string } | null>(null);
   const { addReaction, removeReaction, editMessage, deleteMessage } = useMessageStore();
   const currentUser = useAuthStore((s) => s.user);
   const { openProfile } = useProfileStore();
@@ -302,13 +304,12 @@ export function Message({ message, showAvatar, isCompact, onOpenThread, readOnly
                   <div className="flex items-center gap-3 px-3 py-2.5 border-l-4 border-slack-link">
                     <FileIcon className="h-8 w-8 text-slack-link flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <a
-                        href={getAuthFileUrl(`/files/${file.id}/download`, { download: true })}
-                        download={file.originalName.replace(/[/\\:\0]/g, '_')} rel="noopener"
-                        className="block text-[13px] font-medium text-slack-link hover:underline truncate"
+                      <button
+                        onClick={() => setPreviewFile({ id: file.id, name: file.originalName, size: file.size, mimetype: file.mimetype })}
+                        className="block text-[13px] font-medium text-slack-link hover:underline truncate text-left"
                       >
                         {file.originalName}
-                      </a>
+                      </button>
                       <span className="text-[11px] text-slack-disabled">
                         {formatFileSize(file.size)}
                       </span>
@@ -404,6 +405,17 @@ export function Message({ message, showAvatar, isCompact, onOpenThread, readOnly
           src={lightboxSrc}
           alt={lightboxAlt}
           onClose={() => setLightboxSrc(null)}
+        />
+      )}
+
+      {/* File Preview Modal */}
+      {previewFile && (
+        <FilePreviewModal
+          fileId={previewFile.id}
+          fileName={previewFile.name}
+          fileSize={previewFile.size}
+          mimetype={previewFile.mimetype}
+          onClose={() => setPreviewFile(null)}
         />
       )}
 
