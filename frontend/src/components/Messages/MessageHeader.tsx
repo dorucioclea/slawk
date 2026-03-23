@@ -135,9 +135,7 @@ export function MessageHeader({ channel, showMembers, onToggleMembers, onToggleP
             <span>{channel.memberCount}</span>
           </button>
           <div className="hidden sm:block h-4 w-px bg-slack-border" />
-          <div className="hidden sm:block">
-            <HeaderNotifications excludeChannelId={channel.id} />
-          </div>
+          <HeaderNotifications excludeChannelId={channel.id} />
           <div className="hidden sm:block h-4 w-px bg-slack-border" />
           <div className="hidden sm:block">
             <HeaderSearch />
