@@ -64,7 +64,7 @@ export function Message({ message, showAvatar, isCompact, onOpenThread, readOnly
   const isEditing = editingId === message.id;
 
   // Collapsible long messages
-  const MAX_COLLAPSED_HEIGHT = 300;
+  const MAX_COLLAPSED_HEIGHT = 150;
   const contentRef = useRef<HTMLDivElement>(null);
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [needsCollapse, setNeedsCollapse] = useState(false);
