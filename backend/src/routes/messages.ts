@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
+import { MAX_MESSAGE_LENGTH } from '../utils/params.js';
 import prisma from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requireChannelMembership, requirePublicChannelReadAccess } from '../middleware/authorize.js';
@@ -14,7 +15,7 @@ const router = Router();
 
 const createMessageSchema = z.object({
   content: z.string()
-    .max(4000)
+    .max(MAX_MESSAGE_LENGTH)
     .refine(
       (val) => !val.includes('\u0000'),
       { message: 'Message content cannot contain null bytes' }

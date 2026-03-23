@@ -308,17 +308,23 @@ export function initializeWebSocket(httpServer: HttpServer) {
     });
 
     // Send message
-    socket.on('message:send', async (rawData: unknown) => {
+    socket.on('message:send', async (rawData: unknown, ack?: (response: { error?: string }) => void) => {
+      const sendError = (message: string) => {
+        if (typeof ack === 'function') ack({ error: message });
+        else socket.emit('error', { message });
+      };
+
       if (!socket.user) return;
       if (!checkRateLimit(socket.user.userId, 'message:send')) {
-        socket.emit('error', { message: 'Rate limit exceeded' });
+        sendError('Rate limit exceeded');
         return;
       }
 
       try {
         const parsed = wsMessageSendSchema.safeParse(rawData);
         if (!parsed.success) {
-          socket.emit('error', { message: 'Invalid message payload' });
+          const firstIssue = parsed.error.issues[0];
+          sendError(firstIssue?.message || 'Invalid message payload');
           return;
         }
         const data = parsed.data;
@@ -326,7 +332,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
         // Verify user is a member of the channel
         const isMember = await checkChannelMembership(socket.user.userId, data.channelId);
         if (!isMember) {
-          socket.emit('error', { message: 'You must join the channel to send messages' });
+          sendError('You must join the channel to send messages');
           return;
         }
 
@@ -336,7 +342,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
           select: { archivedAt: true },
         });
         if (channel?.archivedAt) {
-          socket.emit('error', { message: 'This channel has been archived' });
+          sendError('This channel has been archived');
           return;
         }
 
@@ -346,7 +352,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
             where: { id: data.threadId },
           });
           if (!parentMessage || parentMessage.deletedAt || parentMessage.channelId !== data.channelId) {
-            socket.emit('error', { message: 'Thread parent must belong to the same channel' });
+            sendError('Thread parent must belong to the same channel');
             return;
           }
         }
@@ -385,6 +391,9 @@ export function initializeWebSocket(httpServer: HttpServer) {
         // Broadcast to all OTHER users in the channel room
         socket.to(`channel:${data.channelId}`).emit('message:new', finalMessage);
 
+        // Ack success to the sender
+        if (typeof ack === 'function') ack({});
+
         // Fire push notifications (fire-and-forget)
         if (finalMessage && !data.threadId) {
           const channelInfo = await prisma.channel.findUnique({
@@ -412,7 +421,7 @@ export function initializeWebSocket(httpServer: HttpServer) {
         }
       } catch (error) {
         logError('WebSocket message error', error);
-        socket.emit('error', { message: 'Failed to send message' });
+        sendError('Failed to send message');
       }
     });
 

@@ -66,11 +66,15 @@ export function MessageInput({ placeholder, onSend, sendError, clearSendError, c
     if (!text && editor.pendingFiles.length === 0) return;
     const content = text || '';
     const fileIds = editor.pendingFiles.map((f) => f.id);
-    editor.clearEditor();
-    // Clear saved draft on send
-    const key = getDraftKey(channelId, dmParticipantIds);
-    if (key) drafts.delete(key);
-    await onSend(content, fileIds.length > 0 ? fileIds : undefined);
+    try {
+      await onSend(content, fileIds.length > 0 ? fileIds : undefined);
+      editor.clearEditor();
+      // Clear saved draft on send
+      const key = getDraftKey(channelId, dmParticipantIds);
+      if (key) drafts.delete(key);
+    } catch {
+      // Send failed — editor content is preserved so the user doesn't lose their message
+    }
   }, [onSend, editor, channelId, dmParticipantIds]);
 
   handleSendRef.current = handleSend;

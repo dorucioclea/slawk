@@ -1,3 +1,6 @@
+/** Maximum allowed message content length (matches Slack's 40k limit). */
+export const MAX_MESSAGE_LENGTH = 40000;
+
 /**
  * Strictly parse a route parameter as a positive integer.
  * Unlike parseInt(), rejects strings like "123abc" or "1.5".

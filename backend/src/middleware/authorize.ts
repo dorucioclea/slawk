@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import { z } from 'zod';
 import prisma from '../db.js';
 import { AuthRequest } from '../types.js';
-import { parseIntParam } from '../utils/params.js';
+import { parseIntParam, MAX_MESSAGE_LENGTH } from '../utils/params.js';
 
 // ── Express Middleware ──────────────────────────────────────────────
 
@@ -327,11 +327,11 @@ export async function checkChannelMembership(
 
 // ── Zod Schemas for WebSocket Payloads ──────────────────────────────
 
-const contentSchema = z.string().min(1).max(4000)
+const contentSchema = z.string().min(1).max(MAX_MESSAGE_LENGTH)
   .refine(val => val.trim().length > 0, { message: 'Content cannot be empty' })
   .refine(val => !val.includes('\u0000'), { message: 'Content cannot contain null bytes' });
 
-const optionalContentSchema = z.string().max(4000)
+const optionalContentSchema = z.string().max(MAX_MESSAGE_LENGTH)
   .refine(val => !val.includes('\u0000'), { message: 'Content cannot contain null bytes' });
 
 export const wsMessageSendSchema = z.object({

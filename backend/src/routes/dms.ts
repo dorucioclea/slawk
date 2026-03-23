@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
+import { MAX_MESSAGE_LENGTH } from '../utils/params.js';
 import prisma from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requireDmOwnership, requireDmAccess } from '../middleware/authorize.js';
@@ -15,7 +16,7 @@ const router = Router();
 
 const sendDMSchema = z.object({
   toUserId: z.number().int().positive(),
-  content: z.string().max(4000)
+  content: z.string().max(MAX_MESSAGE_LENGTH)
     .refine(val => !val.includes('\u0000'), { message: 'Content cannot contain null bytes' }),
   fileIds: z.array(z.number().int().positive()).max(10).optional(),
 }).refine(
@@ -361,7 +362,7 @@ router.post('/messages/:id/reply', authMiddleware, requireDmAccess, async (req: 
     }
 
     const replySchema = z.object({
-      content: z.string().max(4000)
+      content: z.string().max(MAX_MESSAGE_LENGTH)
         .refine(val => !val.includes('\u0000'), { message: 'Content cannot contain null bytes' }),
       fileIds: z.array(z.number().int().positive()).max(10).optional(),
     }).refine(
@@ -495,7 +496,7 @@ router.patch('/messages/:id', authMiddleware, requireDmOwnership, async (req: Au
     const dmId = req.dm.id;
 
     const contentSchema = z.object({
-      content: z.string().min(1).max(4000)
+      content: z.string().min(1).max(MAX_MESSAGE_LENGTH)
         .refine(val => !val.includes('\u0000'), { message: 'Content cannot contain null bytes' }),
     });
     const { content } = contentSchema.parse(req.body);

@@ -106,8 +106,20 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   sendMessage: async (channelId: number, content: string, fileIds?: number[]) => {
     const socket = getSocket();
     if (socket?.connected) {
-      // Send via socket so the backend broadcasts to all users in the channel
-      socket.emit('message:send', { channelId, content, fileIds });
+      // Send via socket with ack callback so we can detect errors
+      return new Promise<void>((resolve, reject) => {
+        socket.emit('message:send', { channelId, content, fileIds }, (response: { error?: string }) => {
+          if (response?.error) {
+            set({ sendError: response.error });
+            reject(new Error(response.error));
+          } else {
+            set({ sendError: null });
+            resolve();
+          }
+        });
+        // Fallback timeout — if no ack in 5s, assume success (older server without ack)
+        setTimeout(resolve, 5000);
+      });
     } else {
       // Fallback to REST if socket not connected
       try {
@@ -117,8 +129,10 @@ export const useMessageStore = create<MessageState>((set, get) => ({
           messages: [...state.messages, message],
           sendError: null,
         }));
-      } catch {
-        set({ sendError: 'Message failed to send. Please try again.' });
+      } catch (err: any) {
+        const msg = err?.message || 'Message failed to send. Please try again.';
+        set({ sendError: msg });
+        throw err;
       }
     }
   },

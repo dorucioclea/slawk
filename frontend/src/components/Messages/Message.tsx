@@ -214,8 +214,17 @@ export function Message({ message, showAvatar, isCompact, onOpenThread, readOnly
             )}
             {needsCollapse && (
               <button
-                onClick={() => setIsCollapsed(!isCollapsed)}
-                className="text-[13px] font-medium text-slack-link hover:underline mt-0.5"
+                onClick={() => {
+                  const wasCollapsed = isCollapsed;
+                  setIsCollapsed(!isCollapsed);
+                  if (wasCollapsed && contentRef.current) {
+                    // After expanding, scroll the message top into view
+                    requestAnimationFrame(() => {
+                      contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    });
+                  }
+                }}
+                className="relative z-10 text-[13px] font-medium text-slack-link hover:underline mt-0.5"
               >
                 {isCollapsed ? 'Show more' : 'Show less'}
               </button>
