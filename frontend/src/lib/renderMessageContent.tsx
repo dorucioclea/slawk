@@ -2,11 +2,13 @@ import React from 'react';
 
 /**
  * Parses inline markdown in a single line and returns React nodes.
- * Handles: **bold**, *italic*, `code`, ~~strikethrough~~, [text](url), plain URLs, @mentions
+ * Handles: **bold**, *italic*, _italic_, `code`, ~~strikethrough~~, ~strikethrough~, [text](url), plain URLs, @mentions
+ * Nested formatting is supported (e.g. **bold _and italic_**).
  */
 function renderInline(content: string, keyOffset: number = 0): React.ReactNode[] {
   // Mentions use <@id|name> format (inserted by autocomplete). Bare @word is NOT a mention.
-  const TOKEN = /(\*\*(.+?)\*\*)|(<@(\d+)\|([^>]+)>)|(\*([^*\n]+?)\*)|(`([^`\n]+?)`)|(~~(.+?)~~)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"'\])]+)/g;
+  // Order matters: **bold** before *italic*, ~~strike~~ before ~strike~, _italic_ uses word-boundary-like guards
+  const TOKEN = /(\*\*(.+?)\*\*)|(<@(\d+)\|([^>]+)>)|(\*([^*\n]+?)\*)|((?<![a-zA-Z0-9])_([^_\n]+?)_(?![a-zA-Z0-9]))|(`([^`\n]+?)`)|(~~(.+?)~~)|(~([^~\n]+?)~)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"'\])]+)/g;
   const nodes: React.ReactNode[] = [];
   let last = 0;
   let m: RegExpExecArray | null;
@@ -14,26 +16,32 @@ function renderInline(content: string, keyOffset: number = 0): React.ReactNode[]
   while ((m = TOKEN.exec(content)) !== null) {
     if (m.index > last) nodes.push(content.slice(last, m.index));
     if (m[1]) {
-      // **bold**
-      nodes.push(<strong key={key++} className="font-bold">{m[2]}</strong>);
+      // **bold** — recurse for nested formatting
+      nodes.push(<strong key={key++} className="font-bold">{renderInline(m[2], key * 1000)}</strong>);
     } else if (m[3]) {
       // <@id|name> — mention
       nodes.push(<span key={key++} className="mention-highlight rounded bg-slack-mention px-[2px] text-slack-link font-medium cursor-pointer hover:bg-slack-mention-hover" data-mention-id={m[4]} data-mention-name={m[5]}>@{m[5]}</span>);
     } else if (m[6]) {
-      // *italic*
-      nodes.push(<em key={key++} className="leading-[22px]">{m[7]}</em>);
+      // *italic* — recurse for nested formatting
+      nodes.push(<em key={key++} className="leading-[22px]">{renderInline(m[7], key * 1000)}</em>);
     } else if (m[8]) {
-      // `code`
-      nodes.push(<code key={key++} className="rounded-[3px] border border-slack-border bg-slack-code-bg px-1 py-0.5 font-mono text-[0.875em] text-slack-code-inline">{m[9]}</code>);
+      // _italic_ — recurse for nested formatting
+      nodes.push(<em key={key++} className="leading-[22px]">{renderInline(m[9], key * 1000)}</em>);
     } else if (m[10]) {
-      // ~~strikethrough~~
-      nodes.push(<s key={key++}>{m[11]}</s>);
+      // `code` — no recursion (code is literal)
+      nodes.push(<code key={key++} className="rounded-[3px] border border-slack-border bg-slack-code-bg px-1 py-0.5 font-mono text-[0.875em] text-slack-code-inline">{m[11]}</code>);
     } else if (m[12]) {
-      // [text](url)
-      nodes.push(<a key={key++} href={m[13]} target="_blank" rel="noopener noreferrer" className="text-slack-link underline hover:text-slack-link-hover">{m[12]}</a>);
+      // ~~strikethrough~~ — recurse for nested formatting
+      nodes.push(<s key={key++}>{renderInline(m[13], key * 1000)}</s>);
     } else if (m[14]) {
+      // ~strikethrough~ — recurse for nested formatting
+      nodes.push(<s key={key++}>{renderInline(m[15], key * 1000)}</s>);
+    } else if (m[16]) {
+      // [text](url)
+      nodes.push(<a key={key++} href={m[17]} target="_blank" rel="noopener noreferrer" className="text-slack-link underline hover:text-slack-link-hover">{m[16]}</a>);
+    } else if (m[18]) {
       // plain URL
-      nodes.push(<a key={key++} href={m[14]} target="_blank" rel="noopener noreferrer" className="text-slack-link underline hover:text-slack-link-hover">{m[14]}</a>);
+      nodes.push(<a key={key++} href={m[18]} target="_blank" rel="noopener noreferrer" className="text-slack-link underline hover:text-slack-link-hover">{m[18]}</a>);
     }
     last = m.index + m[0].length;
   }
