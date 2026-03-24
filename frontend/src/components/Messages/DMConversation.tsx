@@ -26,6 +26,7 @@ import { PortalEmojiPicker } from '@/components/ui/emoji-picker';
 import { MessageInput } from './MessageInput';
 import { ThreadPanel } from './ThreadPanel';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
+import { ImageLightbox } from './ImageLightbox';
 import { HeaderSearch } from './HeaderSearch';
 import { HeaderNotifications } from './HeaderNotifications';
 import { HeaderTabs } from './HeaderTabs';
@@ -78,6 +79,8 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
   const [isStarred, setIsStarred] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [lightboxAlt, setLightboxAlt] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isAtBottom = useRef(true);
@@ -469,7 +472,12 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
                                     </div>
                                   ) : file.mimetype.startsWith('image/') ? (
                                     <div>
-                                      <img src={getFileUrl(file.id)} alt={file.originalName} className="max-h-[200px] max-w-[300px] object-contain" />
+                                      <button
+                                        onClick={() => { setLightboxSrc(getFileUrl(file.id)); setLightboxAlt(file.originalName); }}
+                                        className="block cursor-zoom-in focus:outline-none"
+                                      >
+                                        <img src={getFileUrl(file.id)} alt={file.originalName} className="max-h-[200px] max-w-[300px] object-contain" />
+                                      </button>
                                       <div className="flex items-center gap-2 px-3 py-1.5 border-t border-slack-border">
                                         <span className="text-[13px] text-slack-link truncate max-w-[200px]">{file.originalName}</span>
                                         <a href={getAuthFileUrl(`/files/${file.id}/download`, { download: true })} download={file.originalName.replace(/[/\\:\0]/g, '_')} rel="noopener" className="ml-auto flex-shrink-0 text-slack-disabled hover:text-slack-primary" onClick={(e) => e.stopPropagation()}>
@@ -638,6 +646,15 @@ export function DMConversation({ userId, userName, userAvatar }: DMConversationP
           />
         )}
       </div>
+
+      {/* Image Lightbox */}
+      {lightboxSrc && (
+        <ImageLightbox
+          src={lightboxSrc}
+          alt={lightboxAlt}
+          onClose={() => setLightboxSrc(null)}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       {deleteConfirmId !== null && (

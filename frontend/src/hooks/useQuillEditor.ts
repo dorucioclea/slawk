@@ -436,8 +436,8 @@ export function useQuillEditor({
       quill.root.setAttribute('data-testid', testId);
     }
 
-    // Handle image paste from clipboard
-    quill.root.addEventListener('paste', (e: ClipboardEvent) => {
+    // Handle image paste from clipboard — use capture phase to intercept before Quill
+    const handlePaste = (e: ClipboardEvent) => {
       const clipboardData = e.clipboardData;
       if (!clipboardData) return;
 
@@ -451,10 +451,7 @@ export function useQuillEditor({
 
       if (imageFiles.length > 0) {
         e.preventDefault();
-        e.stopPropagation();
-        requestAnimationFrame(() => {
-          quill.root.querySelectorAll('img[src^="data:"]').forEach((img) => img.remove());
-        });
+        e.stopImmediatePropagation();
         (async () => {
           setIsUploading(true);
           setUploadError(null);
@@ -472,7 +469,8 @@ export function useQuillEditor({
           }
         })();
       }
-    });
+    };
+    quill.root.addEventListener('paste', handlePaste, { capture: true });
 
     quillRef.current = quill;
   }, [placeholder, testId, enableInlineCode]); // eslint-disable-line react-hooks/exhaustive-deps
