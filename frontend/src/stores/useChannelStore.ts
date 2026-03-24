@@ -42,6 +42,7 @@ interface ChannelState {
   createChannel: (name: string, isPrivate?: boolean) => Promise<number>;
   joinChannel: (channelId: number) => Promise<void>;
   leaveChannel: (channelId: number) => Promise<number | null>;
+  removeChannelMember: (channelId: number, userId: number) => Promise<void>;
   toggleStar: (channelId: number) => void;
   setActiveChannel: (channelId: number, scrollToMessageId?: number) => void;
   setActiveDM: (dmId: number, scrollToMessageId?: number) => void;
@@ -160,6 +161,16 @@ export const useChannelStore = create<ChannelState>((set, get) => ({
       return nextChannelId;
     } catch (err) {
       console.error('Failed to leave channel:', err);
+      throw err;
+    }
+  },
+
+  removeChannelMember: async (channelId: number, userId: number) => {
+    try {
+      await api.removeChannelMember(channelId, userId);
+      // Member count will be updated via WebSocket channel:member-left event
+    } catch (err) {
+      console.error('Failed to remove channel member:', err);
       throw err;
     }
   },

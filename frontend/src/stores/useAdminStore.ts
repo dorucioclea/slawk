@@ -24,6 +24,7 @@ interface AdminState {
   archiveChannel: (channelId: number) => Promise<void>;
   unarchiveChannel: (channelId: number) => Promise<void>;
   editChannel: (channelId: number, data: { name?: string; isPrivate?: boolean }) => Promise<void>;
+  removeChannelMember: (channelId: number, userId: number) => Promise<void>;
 }
 
 export const useAdminStore = create<AdminState>((set, get) => ({
@@ -171,6 +172,16 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       set({ channels: get().channels.map((c) => (c.id === channelId ? updated : c)) });
     } catch (err) {
       set({ channels: prev, error: err instanceof Error ? err.message : 'Failed to edit channel' });
+    }
+  },
+
+  removeChannelMember: async (channelId, userId) => {
+    try {
+      await api.adminRemoveChannelMember(channelId, userId);
+      // Member count will be updated via WebSocket channel:member-left event
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'Failed to remove channel member' });
+      throw err;
     }
   },
 
