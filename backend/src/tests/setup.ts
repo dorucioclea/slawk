@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import prisma from '../db.js';
 import { clearTokenCache } from '../middleware/auth.js';
 

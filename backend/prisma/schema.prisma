@@ -49,6 +49,7 @@ model User {
   inviteLinks        InviteLink[]
   auditLogs          AuditLog[]
   pushSubscriptions  PushSubscription[]
+  webhooks           Webhook[]
 }
 
 model InviteLink {
@@ -75,6 +76,7 @@ model Channel {
   members            ChannelMember[]
   reads              ChannelRead[]
   scheduledMessages  ScheduledMessage[]
+  webhooks           Webhook[]
 }
 
 model AuditLog {
@@ -263,4 +265,22 @@ model PushSubscription {
 
   @@unique([userId, endpoint])
   @@index([userId])
+}
+
+model Webhook {
+  id          Int       @id @default(autoincrement())
+  name        String    @db.VarChar(100)
+  channelId   Int
+  token       String    @unique @db.VarChar(64)
+  createdBy   Int
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+  lastUsedAt  DateTime?
+
+  channel     Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  creator     User      @relation(fields: [createdBy], references: [id])
+
+  @@index([channelId])
+  @@index([token])
 }
