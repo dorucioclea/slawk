@@ -32,12 +32,6 @@ import type { AuthUser } from '@/lib/api';
 import { useMobileStore } from '@/stores/useMobileStore';
 // HuddleBar moved to global render in App.tsx
 
-const navItems = [
-  { icon: Inbox, label: 'Unreads', id: 'unreads' },
-  { icon: Bookmark, label: 'Later', id: 'later' },
-  { icon: FileText, label: 'Files', id: 'files' },
-];
-
 export function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -57,6 +51,15 @@ export function Sidebar() {
   const [showWorkspaceMenu, setShowWorkspaceMenu] = useState(false);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
+
+  // Calculate total unread count across all channels
+  const totalUnreadCount = channels.reduce((sum, ch) => sum + ch.unreadCount, 0);
+
+  const navItems = [
+    { icon: Inbox, label: 'Unreads', id: 'unreads', badge: totalUnreadCount > 0 ? totalUnreadCount : undefined },
+    { icon: Bookmark, label: 'Later', id: 'later' },
+    { icon: FileText, label: 'Files', id: 'files' },
+  ];
 
   // Close avatar menu when clicking outside
   useEffect(() => {
