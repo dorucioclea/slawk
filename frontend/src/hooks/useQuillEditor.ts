@@ -311,7 +311,7 @@ export function useQuillEditor({
       }
     });
 
-    // Handle image drop from drag-and-drop
+    // Handle file drop from drag-and-drop
     const handleDragOver = (e: DragEvent) => {
       // Required to allow drop — only if dragging files
       if (e.dataTransfer?.types.includes('Files')) {
@@ -322,33 +322,28 @@ export function useQuillEditor({
     };
 
     const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
       const files = e.dataTransfer?.files;
       if (!files || files.length === 0) return;
 
-      // Only handle image files
-      const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
-
-      if (imageFiles.length > 0) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        (async () => {
-          setIsUploading(true);
-          setUploadError(null);
-          try {
-            for (const file of imageFiles) {
-              const uploaded = await uploadFile(file);
-              setPendingFiles((prev) => [...prev, uploaded]);
-            }
-          } catch (err: any) {
-            const msg = err?.message || 'Failed to upload dropped image. Please try again.';
-            setUploadError(msg);
-            setTimeout(() => setUploadError(null), 5000);
-          } finally {
-            setIsUploading(false);
+      (async () => {
+        setIsUploading(true);
+        setUploadError(null);
+        try {
+          for (const file of Array.from(files)) {
+            const uploaded = await uploadFile(file);
+            setPendingFiles((prev) => [...prev, uploaded]);
           }
-        })();
-      }
+        } catch (err: any) {
+          const msg = err?.message || 'Failed to upload dropped file. Please try again.';
+          setUploadError(msg);
+          setTimeout(() => setUploadError(null), 5000);
+        } finally {
+          setIsUploading(false);
+        }
+      })();
     };
 
     quill.root.addEventListener('dragover', handleDragOver as any);
